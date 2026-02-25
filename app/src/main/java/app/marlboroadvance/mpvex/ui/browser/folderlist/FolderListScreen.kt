@@ -2,6 +2,7 @@ package app.marlboroadvance.mpvex.ui.browser.folderlist
 
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -83,6 +84,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import android.util.Log
 import app.marlboroadvance.mpvex.domain.browser.FileSystemItem
 import app.marlboroadvance.mpvex.domain.media.model.VideoFolder
+import app.marlboroadvance.mpvex.domain.media.model.Video
 import app.marlboroadvance.mpvex.preferences.AppearancePreferences
 import app.marlboroadvance.mpvex.preferences.BrowserPreferences
 import app.marlboroadvance.mpvex.preferences.FolderSortType
@@ -103,6 +105,7 @@ import app.marlboroadvance.mpvex.ui.browser.dialogs.GridColumnSelector
 import app.marlboroadvance.mpvex.ui.browser.dialogs.SortDialog
 import app.marlboroadvance.mpvex.ui.browser.dialogs.ViewModeSelector
 import app.marlboroadvance.mpvex.ui.browser.dialogs.VisibilityToggle
+import app.marlboroadvance.mpvex.ui.browser.dialogs.AddToPlaylistDialog
 import app.marlboroadvance.mpvex.ui.browser.filesystem.FileSystemDirectoryScreen
 import app.marlboroadvance.mpvex.ui.browser.filesystem.FileSystemBrowserRootScreen
 import app.marlboroadvance.mpvex.ui.browser.selection.rememberSelectionManager
@@ -164,6 +167,7 @@ object FolderListScreen : Screen {
     val scanStatus by viewModel.scanStatus.collectAsState()
     val hasCompletedInitialLoad by viewModel.hasCompletedInitialLoad.collectAsState()
     val foldersWereDeleted by viewModel.foldersWereDeleted.collectAsState()
+    val pinnedFolders by foldersPreferences.pinnedFolders.collectAsState()
 
     // Preferences
     val mediaLayoutMode by browserPreferences.mediaLayoutMode.collectAsState()
@@ -186,6 +190,9 @@ object FolderListScreen : Screen {
     val sortDialogOpen = rememberSaveable { mutableStateOf(false) }
     val deleteDialogOpen = rememberSaveable { mutableStateOf(false) }
     val showLinkDialog = remember { mutableStateOf(false) }
+    
+    val showAddToPlaylistDialog = rememberSaveable { mutableStateOf(false) }
+    var videosToAddToPlaylist by remember { mutableStateOf<List<Video>>(emptyList()) }
 
     // Search state
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -233,9 +240,9 @@ object FolderListScreen : Screen {
       }
     }
 
-    // Sorting and filtering
-    val sortedFolders = remember(videoFolders, folderSortType, folderSortOrder) {
-      SortUtils.sortFolders(videoFolders, folderSortType, folderSortOrder)
+    // Sorting and filtering (Now respects Pinned Folders)
+    val sortedFolders = remember(videoFolders, folderSortType, folderSortOrder, pinnedFolders) {
+      SortUtils.sortFolders(videoFolders, folderSortType, folderSortOrder, pinnedFolders)
     }
 
     val filteredFolders = sortedFolders
@@ -388,6 +395,37 @@ object FolderListScreen : Screen {
                   }
                   selectionManager.clear()
                 }
+              }
+            },
+            onAddToPlaylistClick = {
+              coroutineScope.launch {
+                val selectedIds = selectionManager.getSelectedItems().map { it.bucketId }.toSet()
+                val allVideos = app.marlboroadvance.mpvex.repository.MediaFileRepository
+                  .getVideosForBuckets(context, selectedIds)
+                if (allVideos.isNotEmpty()) {
+                  videosToAddToPlaylist = allVideos
+                  showAddToPlaylistDialog.value = true
+                }
+              }
+            },
+            onPinClick = {
+              coroutineScope.launch {
+                val selectedFolders = selectionManager.getSelectedItems()
+                val currentPinned = foldersPreferences.pinnedFolders.get().toMutableSet()
+                
+                // Agar saare selected pehle se pinned hain, toh unpin karo. Varna pin karo.
+                val allPinned = selectedFolders.all { currentPinned.contains(it.path) }
+                
+                if (allPinned) {
+                    selectedFolders.forEach { currentPinned.remove(it.path) }
+                    Toast.makeText(context, "Folders unpinned", Toast.LENGTH_SHORT).show()
+                } else {
+                    selectedFolders.forEach { currentPinned.add(it.path) }
+                    Toast.makeText(context, "Folders pinned to top", Toast.LENGTH_SHORT).show()
+                }
+                
+                foldersPreferences.pinnedFolders.set(currentPinned)
+                selectionManager.clear()
               }
             },
             onBlacklistClick = {
@@ -570,6 +608,13 @@ object FolderListScreen : Screen {
         isOpen = showLinkDialog.value,
         onDismiss = { showLinkDialog.value = false },
         onPlayLink = { url -> MediaUtils.playFile(url, context, "play_link") },
+      )
+
+      AddToPlaylistDialog(
+        isOpen = showAddToPlaylistDialog.value,
+        videos = videosToAddToPlaylist,
+        onDismiss = { showAddToPlaylistDialog.value = false },
+        onSuccess = { selectionManager.clear() },
       )
 
       FolderSortDialog(
@@ -1118,7 +1163,8 @@ private suspend fun searchFoldersAndVideos(
   context: Context,
   query: String,
 ): List<FileSystemItem> {
-  val results = mutableListOf<FileSystemItem>()
+  val folderResults = mutableListOf<FileSystemItem>()
+  val videoResults = mutableListOf<FileSystemItem>()
   
   try {
     Log.d("FolderListScreen", "Searching for: $query")
@@ -1131,7 +1177,7 @@ private suspend fun searchFoldersAndVideos(
     folders.forEach { folder ->
       if (folder.name.contains(query, ignoreCase = true) || 
           folder.path.contains(query, ignoreCase = true)) {
-        results.add(
+        folderResults.add(
           FileSystemItem.Folder(
             name = folder.name,
             path = folder.path,
@@ -1149,7 +1195,7 @@ private suspend fun searchFoldersAndVideos(
       
       videos.forEach { video ->
         if (video.displayName.contains(query, ignoreCase = true)) {
-          results.add(
+          videoResults.add(
             FileSystemItem.VideoFile(
               name = video.displayName,
               path = video.path,
@@ -1161,10 +1207,11 @@ private suspend fun searchFoldersAndVideos(
       }
     }
     
-    Log.d("FolderListScreen", "Found ${results.size} results for: $query")
+    Log.d("FolderListScreen", "Found ${folderResults.size + videoResults.size} results for: $query")
   } catch (e: Exception) {
     Log.e("FolderListScreen", "Error searching folders and videos", e)
   }
   
-  return results
+  // Return folders first, then videos
+  return folderResults + videoResults
 }
