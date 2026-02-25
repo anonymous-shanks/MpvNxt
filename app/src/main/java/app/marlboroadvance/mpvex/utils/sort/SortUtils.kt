@@ -33,15 +33,25 @@ object SortUtils {
     folders: List<VideoFolder>,
     sortType: FolderSortType,
     sortOrder: SortOrder,
+    pinnedFolders: Set<String> = emptySet()
   ): List<VideoFolder> {
     val sorted =
       when (sortType) {
         FolderSortType.Title -> folders.sortedWith { t1, t2 -> NaturalOrderComparator.DEFAULT.compare(t1.name, t2.name) }
-        FolderSortType.Date -> folders.sortedBy { it.lastModified }
-        FolderSortType.Size -> folders.sortedBy { it.totalSize }
-        FolderSortType.VideoCount -> folders.sortedBy { it.videoCount }
+        FolderSortType.Date -> folders.sortedByDescending { it.lastModified }
+        FolderSortType.Size -> folders.sortedByDescending { it.totalSize }
+        FolderSortType.VideoCount -> folders.sortedByDescending { it.videoCount }
       }
-    return if (sortOrder.isAscending) sorted else sorted.reversed()
+      
+    val orderedFolders = if (sortOrder.isAscending) sorted else sorted.reversed()
+
+    if (pinnedFolders.isEmpty()) return orderedFolders
+
+    // Separate pinned and unpinned, keeping their internal sorted order
+    val pinned = orderedFolders.filter { pinnedFolders.contains(it.path) }
+    val unpinned = orderedFolders.filterNot { pinnedFolders.contains(it.path) }
+
+    return pinned + unpinned
   }
 
   /**
