@@ -150,7 +150,6 @@ object FolderListScreen : Screen {
     val coroutineScope = rememberCoroutineScope()
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
-    // ViewModels and preferences
     val viewModel: FolderListViewModel = viewModel(
       factory = FolderListViewModel.factory(context.applicationContext as android.app.Application)
     )
@@ -159,7 +158,6 @@ object FolderListScreen : Screen {
     val foldersPreferences = koinInject<FoldersPreferences>()
     val advancedPreferences = koinInject<app.marlboroadvance.mpvex.preferences.AdvancedPreferences>()
 
-    // State collection
     val videoFolders by viewModel.videoFolders.collectAsState()
     val foldersWithNewCount by viewModel.foldersWithNewCount.collectAsState()
     val recentlyPlayedFilePath by viewModel.recentlyPlayedFilePath.collectAsState()
@@ -169,7 +167,6 @@ object FolderListScreen : Screen {
     val foldersWereDeleted by viewModel.foldersWereDeleted.collectAsState()
     val pinnedFolders by foldersPreferences.pinnedFolders.collectAsState()
 
-    // Preferences
     val mediaLayoutMode by browserPreferences.mediaLayoutMode.collectAsState()
     val folderGridColumnsPortrait by browserPreferences.folderGridColumnsPortrait.collectAsState()
   val folderGridColumnsLandscape by browserPreferences.folderGridColumnsLandscape.collectAsState()
@@ -180,9 +177,7 @@ object FolderListScreen : Screen {
     val folderSortType by browserPreferences.folderSortType.collectAsState()
     val folderSortOrder by browserPreferences.folderSortOrder.collectAsState()
     val tapThumbnailToSelect by gesturePreferences.tapThumbnailToSelect.collectAsState()
-    val enableRecentlyPlayed by advancedPreferences.enableRecentlyPlayed.collectAsState()
 
-    // UI state - use standalone states to avoid scroll issues with predictive back gesture
     val listState = rememberLazyListState()
     val gridState = rememberLazyGridState()
     val navigationBarHeight = LocalNavigationBarHeight.current
@@ -194,15 +189,12 @@ object FolderListScreen : Screen {
     val showAddToPlaylistDialog = rememberSaveable { mutableStateOf(false) }
     var videosToAddToPlaylist by remember { mutableStateOf<List<Video>>(emptyList()) }
 
-    // Search state
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var isSearching by rememberSaveable { mutableStateOf(false) }
     var searchResults by remember { mutableStateOf<List<FileSystemItem>>(emptyList()) }
     var isSearchLoading by remember { mutableStateOf(false) }
-    val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
 
-    // Search logic
     LaunchedEffect(searchQuery, isSearching) {
       if (isSearching && searchQuery.isNotBlank()) {
         isSearchLoading = true
@@ -210,7 +202,6 @@ object FolderListScreen : Screen {
           val results = searchFoldersAndVideos(context, searchQuery)
           searchResults = results
         } catch (e: Exception) {
-          Log.e("FolderListScreen", "Error during search", e)
           searchResults = emptyList()
         } finally {
           isSearchLoading = false
@@ -221,11 +212,9 @@ object FolderListScreen : Screen {
       }
     }
 
-    // FAB state
     val isFabVisible = remember { mutableStateOf(true) }
     val isFabExpanded = remember { mutableStateOf(false) }
 
-    // File picker
     val filePicker = rememberLauncherForActivityResult(
       contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -240,14 +229,12 @@ object FolderListScreen : Screen {
       }
     }
 
-    // Sorting and filtering (Now respects Pinned Folders)
     val sortedFolders = remember(videoFolders, folderSortType, folderSortOrder, pinnedFolders) {
       SortUtils.sortFolders(videoFolders, folderSortType, folderSortOrder, pinnedFolders)
     }
 
     val filteredFolders = sortedFolders
     
-    // Selection manager
     val selectionManager = rememberSelectionManager(
       items = sortedFolders,
       getId = { it.bucketId },
@@ -260,19 +247,22 @@ object FolderListScreen : Screen {
       onOperationComplete = { viewModel.refresh() },
     )
 
-    // Permissions
+    // Calculate Pinned State for TopBar
+    val selectedFolders = selectionManager.getSelectedItems()
+    val selectedPinnedCount = selectedFolders.count { pinnedFolders.contains(it.path) }
+    val isAllPinned = selectedFolders.isNotEmpty() && selectedPinnedCount == selectedFolders.size
+    val isMixedPin = selectedPinnedCount > 0 && selectedPinnedCount < selectedFolders.size
+
     val permissionState = PermissionUtils.handleStoragePermission(
       onPermissionGranted = { viewModel.refresh() },
     )
 
-    // Update MainScreen about permission state
     LaunchedEffect(permissionState.status) {
       app.marlboroadvance.mpvex.ui.browser.MainScreen.updatePermissionState(
         isDenied = permissionState.status is PermissionStatus.Denied
       )
     }
 
-    // Lifecycle observer for refresh
     DisposableEffect(lifecycleOwner) {
       val observer = LifecycleEventObserver { _, event ->
         if (event == Lifecycle.Event.ON_RESUME) {
@@ -283,7 +273,6 @@ object FolderListScreen : Screen {
       onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Optimized back handler for immediate response
     val shouldHandleBack = selectionManager.isInSelectionMode || isSearching || isFabExpanded.value
     androidx.activity.compose.BackHandler(enabled = shouldHandleBack) {
       when {
@@ -296,7 +285,6 @@ object FolderListScreen : Screen {
       }
     }
 
-    // FAB scroll tracking
     app.marlboroadvance.mpvex.ui.browser.fab.FabScrollHelper.trackScrollForFabVisibility(
       listState = listState,
       gridState = if (mediaLayoutMode == MediaLayoutMode.GRID) gridState else null,
@@ -317,23 +305,10 @@ object FolderListScreen : Screen {
                 expanded = false,
                 onExpandedChange = { },
                 placeholder = { Text("Search folders and videos...") },
-                leadingIcon = {
-                  Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = "Search",
-                  )
-                },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
                 trailingIcon = {
-                  IconButton(
-                    onClick = {
-                      isSearching = false
-                      searchQuery = ""
-                    },
-                  ) {
-                    Icon(
-                      imageVector = Icons.Filled.Close,
-                      contentDescription = "Cancel",
-                    )
+                  IconButton(onClick = { isSearching = false; searchQuery = "" }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Cancel")
                   }
                 },
                 modifier = Modifier.focusRequester(focusRequester),
@@ -341,14 +316,10 @@ object FolderListScreen : Screen {
             },
             expanded = false,
             onExpandedChange = { },
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             shape = RoundedCornerShape(28.dp),
             tonalElevation = 6.dp,
-          ) {
-            // Empty content for SearchBar
-          }
+          ) { }
         } else {
           BrowserTopBar(
             title = stringResource(app.marlboroadvance.mpvex.R.string.app_name),
@@ -359,28 +330,22 @@ object FolderListScreen : Screen {
             onCancelSelection = { selectionManager.clear() },
             onSortClick = { sortDialogOpen.value = true },
             onSearchClick = { isSearching = !isSearching },
-            onSettingsClick = {
-              backstack.add(app.marlboroadvance.mpvex.ui.preferences.PreferencesScreen)
-            },
+            onSettingsClick = { backstack.add(app.marlboroadvance.mpvex.ui.preferences.PreferencesScreen) },
             onDeleteClick = { deleteDialogOpen.value = true },
             onRenameClick = null,
             isSingleSelection = selectionManager.isSingleSelection,
             onInfoClick = null,
             onShareClick = {
               coroutineScope.launch {
-                val selectedIds = selectionManager.getSelectedItems().map { it.bucketId }.toSet()
-                val allVideos = app.marlboroadvance.mpvex.repository.MediaFileRepository
-                  .getVideosForBuckets(context, selectedIds)
-                if (allVideos.isNotEmpty()) {
-                  MediaUtils.shareVideos(context, allVideos)
-                }
+                val selectedIds = selectedFolders.map { it.bucketId }.toSet()
+                val allVideos = app.marlboroadvance.mpvex.repository.MediaFileRepository.getVideosForBuckets(context, selectedIds)
+                if (allVideos.isNotEmpty()) { MediaUtils.shareVideos(context, allVideos) }
               }
             },
             onPlayClick = {
               coroutineScope.launch {
-                val selectedIds = selectionManager.getSelectedItems().map { it.bucketId }.toSet()
-                val allVideos = app.marlboroadvance.mpvex.repository.MediaFileRepository
-                  .getVideosForBuckets(context, selectedIds)
+                val selectedIds = selectedFolders.map { it.bucketId }.toSet()
+                val allVideos = app.marlboroadvance.mpvex.repository.MediaFileRepository.getVideosForBuckets(context, selectedIds)
                 if (allVideos.isNotEmpty()) {
                   if (allVideos.size == 1) {
                     MediaUtils.playFile(allVideos.first(), context)
@@ -399,9 +364,8 @@ object FolderListScreen : Screen {
             },
             onAddToPlaylistClick = {
               coroutineScope.launch {
-                val selectedIds = selectionManager.getSelectedItems().map { it.bucketId }.toSet()
-                val allVideos = app.marlboroadvance.mpvex.repository.MediaFileRepository
-                  .getVideosForBuckets(context, selectedIds)
+                val selectedIds = selectedFolders.map { it.bucketId }.toSet()
+                val allVideos = app.marlboroadvance.mpvex.repository.MediaFileRepository.getVideosForBuckets(context, selectedIds)
                 if (allVideos.isNotEmpty()) {
                   videosToAddToPlaylist = allVideos
                   showAddToPlaylistDialog.value = true
@@ -410,39 +374,28 @@ object FolderListScreen : Screen {
             },
             onPinClick = {
               coroutineScope.launch {
-                val selectedFolders = selectionManager.getSelectedItems()
                 val currentPinned = foldersPreferences.pinnedFolders.get().toMutableSet()
-                
-                // Agar saare selected pehle se pinned hain, toh unpin karo. Varna pin karo.
-                val allPinned = selectedFolders.all { currentPinned.contains(it.path) }
-                
-                if (allPinned) {
+                if (isAllPinned) {
                     selectedFolders.forEach { currentPinned.remove(it.path) }
                     Toast.makeText(context, "Folders unpinned", Toast.LENGTH_SHORT).show()
-                } else {
+                } else if (!isMixedPin) {
                     selectedFolders.forEach { currentPinned.add(it.path) }
-                    Toast.makeText(context, "Folders pinned to top", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Folders pinned", Toast.LENGTH_SHORT).show()
                 }
-                
                 foldersPreferences.pinnedFolders.set(currentPinned)
                 selectionManager.clear()
               }
             },
+            isAllPinned = isAllPinned,
+            isMixedPin = isMixedPin,
             onBlacklistClick = {
               coroutineScope.launch {
-                val selectedFolders = selectionManager.getSelectedItems()
                 val blacklistedFolders = foldersPreferences.blacklistedFolders.get().toMutableSet()
-                selectedFolders.forEach { folder ->
-                  blacklistedFolders.add(folder.path)
-                }
+                selectedFolders.forEach { folder -> blacklistedFolders.add(folder.path) }
                 foldersPreferences.blacklistedFolders.set(blacklistedFolders)
                 selectionManager.clear()
                 viewModel.refresh()
-                android.widget.Toast.makeText(
-                  context,
-                  context.getString(app.marlboroadvance.mpvex.R.string.pref_folders_blacklisted),
-                  android.widget.Toast.LENGTH_SHORT,
-                ).show()
+                Toast.makeText(context, context.getString(app.marlboroadvance.mpvex.R.string.pref_folders_blacklisted), Toast.LENGTH_SHORT).show()
               }
             },
             onSelectAll = { selectionManager.selectAll() },
@@ -458,11 +411,7 @@ object FolderListScreen : Screen {
           button = {
             TooltipBox(
               positionProvider = TooltipDefaults.rememberTooltipPositionProvider(
-                if (isFabExpanded.value) {
-                  TooltipAnchorPosition.Start
-                } else {
-                  TooltipAnchorPosition.Above
-                }
+                if (isFabExpanded.value) TooltipAnchorPosition.Start else TooltipAnchorPosition.Above
               ),
               tooltip = { PlainTooltip { Text("Toggle menu") } },
               state = rememberTooltipState(),
@@ -475,49 +424,30 @@ object FolderListScreen : Screen {
                 checked = isFabExpanded.value,
                 onCheckedChange = { isFabExpanded.value = !isFabExpanded.value },
               ) {
-                val imageVector by remember {
-                  derivedStateOf {
-                    if (checkedProgress > 0.5f) Icons.Filled.Close else Icons.Filled.PlayArrow
-                  }
-                }
-                Icon(
-                  painter = rememberVectorPainter(imageVector),
-                  contentDescription = null,
-                  modifier = Modifier.animateIcon({ checkedProgress }),
-                )
+                val imageVector by remember { derivedStateOf { if (checkedProgress > 0.5f) Icons.Filled.Close else Icons.Filled.PlayArrow } }
+                Icon(painter = rememberVectorPainter(imageVector), contentDescription = null, modifier = Modifier.animateIcon({ checkedProgress }))
               }
             }
           },
         ) {
           FloatingActionButtonMenuItem(
-            onClick = {
-              isFabExpanded.value = false
-              filePicker.launch(arrayOf("video/*"))
-            },
+            onClick = { isFabExpanded.value = false; filePicker.launch(arrayOf("video/*")) },
             icon = { Icon(Icons.Filled.FileOpen, contentDescription = null) },
             text = { Text(text = "Open File") },
           )
-
           FloatingActionButtonMenuItem(
             onClick = {
               isFabExpanded.value = false
               coroutineScope.launch {
-                val recentlyPlayedVideos = RecentlyPlayedOps.getRecentlyPlayed(limit = 1)
-                val lastPlayed = recentlyPlayedVideos.firstOrNull()
-                if (lastPlayed != null) {
-                  MediaUtils.playFile(lastPlayed.filePath, context, "recently_played_button")
-                }
+                val lastPlayed = RecentlyPlayedOps.getRecentlyPlayed(limit = 1).firstOrNull()
+                if (lastPlayed != null) MediaUtils.playFile(lastPlayed.filePath, context, "recently_played_button")
               }
             },
             icon = { Icon(Icons.Filled.History, contentDescription = null) },
             text = { Text(text = "Recently Played") },
           )
-
           FloatingActionButtonMenuItem(
-            onClick = {
-              isFabExpanded.value = false
-              showLinkDialog.value = true
-            },
+            onClick = { isFabExpanded.value = false; showLinkDialog.value = true },
             icon = { Icon(Icons.Filled.Link, contentDescription = null) },
             text = { Text(text = "Open Link") },
           )
@@ -528,35 +458,17 @@ object FolderListScreen : Screen {
         when (permissionState.status) {
           PermissionStatus.Granted -> {
             if (isSearching) {
-              // Show search results
               Box(modifier = Modifier.fillMaxSize()) {
                 if (isSearchLoading) {
-                  // Loading state
-                  Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                  ) {
-                    CircularProgressIndicator()
-                  }
+                  Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 } else if (searchResults.isEmpty()) {
-                  // No results
-                  EmptyState(
-                    icon = Icons.Filled.Search,
-                    title = "No results found",
-                    message = "No folders or videos match your search query",
-                    modifier = Modifier.fillMaxSize(),
-                  )
+                  EmptyState(icon = Icons.Filled.Search, title = "No results found", message = "No folders or videos match your search query", modifier = Modifier.fillMaxSize())
                 } else {
-                  // Show search results
                   SearchResultsContent(
                     searchResults = searchResults,
                     navigationBarHeight = navigationBarHeight,
-                    onFolderClick = { folder ->
-                      backstack.add(app.marlboroadvance.mpvex.ui.browser.videolist.VideoListScreen(folder.bucketId, folder.name))
-                    },
-                    onVideoClick = { video ->
-                      MediaUtils.playFile(video, context)
-                    },
+                    onFolderClick = { folder -> backstack.add(app.marlboroadvance.mpvex.ui.browser.videolist.VideoListScreen(folder.bucketId, folder.name)) },
+                    onVideoClick = { video -> MediaUtils.playFile(video, context) },
                     mediaLayoutMode = mediaLayoutMode,
                     folderGridColumns = folderGridColumns,
                   )
@@ -571,6 +483,7 @@ object FolderListScreen : Screen {
                 scanStatus = scanStatus,
                 hasCompletedInitialLoad = hasCompletedInitialLoad,
                 foldersWereDeleted = foldersWereDeleted,
+                pinnedFolders = pinnedFolders, // Passing pinned status downwards
                 mediaLayoutMode = mediaLayoutMode,
                 folderGridColumns = folderGridColumns,
                 tapThumbnailToSelect = tapThumbnailToSelect,
@@ -581,59 +494,21 @@ object FolderListScreen : Screen {
                 selectionManager = selectionManager,
                 onRefresh = { viewModel.refresh() },
                 onFolderClick = { folder ->
-                  if (selectionManager.isInSelectionMode) {
-                    selectionManager.toggle(folder)
-                  } else {
-                    backstack.add(app.marlboroadvance.mpvex.ui.browser.videolist.VideoListScreen(folder.bucketId, folder.name))
-                  }
+                  if (selectionManager.isInSelectionMode) selectionManager.toggle(folder)
+                  else backstack.add(app.marlboroadvance.mpvex.ui.browser.videolist.VideoListScreen(folder.bucketId, folder.name))
                 },
-                onFolderLongClick = { folder ->
-                  selectionManager.toggle(folder)
-                },
+                onFolderLongClick = { folder -> selectionManager.toggle(folder) },
               )
             }
           }
-
-          is PermissionStatus.Denied -> {
-            PermissionDeniedState(
-              onRequestPermission = { permissionState.launchPermissionRequest() },
-              modifier = Modifier,
-            )
-          }
+          is PermissionStatus.Denied -> { PermissionDeniedState(onRequestPermission = { permissionState.launchPermissionRequest() }, modifier = Modifier) }
         }
       }
 
-      // Dialogs
-      PlayLinkSheet(
-        isOpen = showLinkDialog.value,
-        onDismiss = { showLinkDialog.value = false },
-        onPlayLink = { url -> MediaUtils.playFile(url, context, "play_link") },
-      )
-
-      AddToPlaylistDialog(
-        isOpen = showAddToPlaylistDialog.value,
-        videos = videosToAddToPlaylist,
-        onDismiss = { showAddToPlaylistDialog.value = false },
-        onSuccess = { selectionManager.clear() },
-      )
-
-      FolderSortDialog(
-        isOpen = sortDialogOpen.value,
-        onDismiss = { sortDialogOpen.value = false },
-        sortType = folderSortType,
-        sortOrder = folderSortOrder,
-        onSortTypeChange = { browserPreferences.folderSortType.set(it) },
-        onSortOrderChange = { browserPreferences.folderSortOrder.set(it) },
-      )
-
-      DeleteConfirmationDialog(
-        isOpen = deleteDialogOpen.value,
-        onDismiss = { deleteDialogOpen.value = false },
-        onConfirm = { selectionManager.deleteSelected() },
-        itemType = "folder",
-        itemCount = selectionManager.selectedCount,
-        itemNames = selectionManager.getSelectedItems().map { it.name },
-      )
+      PlayLinkSheet(isOpen = showLinkDialog.value, onDismiss = { showLinkDialog.value = false }, onPlayLink = { url -> MediaUtils.playFile(url, context, "play_link") })
+      AddToPlaylistDialog(isOpen = showAddToPlaylistDialog.value, videos = videosToAddToPlaylist, onDismiss = { showAddToPlaylistDialog.value = false }, onSuccess = { selectionManager.clear() })
+      FolderSortDialog(isOpen = sortDialogOpen.value, onDismiss = { sortDialogOpen.value = false }, sortType = folderSortType, sortOrder = folderSortOrder, onSortTypeChange = { browserPreferences.folderSortType.set(it) }, onSortOrderChange = { browserPreferences.folderSortOrder.set(it) })
+      DeleteConfirmationDialog(isOpen = deleteDialogOpen.value, onDismiss = { deleteDialogOpen.value = false }, onConfirm = { selectionManager.deleteSelected() }, itemType = "folder", itemCount = selectionManager.selectedCount, itemNames = selectionManager.getSelectedItems().map { it.name })
     }
   }
 }
@@ -647,6 +522,7 @@ private fun FolderListContent(
   scanStatus: String?,
   hasCompletedInitialLoad: Boolean,
   foldersWereDeleted: Boolean,
+  pinnedFolders: Set<String>,
   mediaLayoutMode: MediaLayoutMode,
   folderGridColumns: Int,
   tapThumbnailToSelect: Boolean,
@@ -663,88 +539,31 @@ private fun FolderListContent(
   val showLoading = isLoading && !hasCompletedInitialLoad
   val showEmpty = folders.isEmpty() && hasCompletedInitialLoad && !foldersWereDeleted
 
-  // Scrollbar alpha animation
   val isAtTop by remember {
     derivedStateOf {
-      if (isGridMode) {
-        gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
-      } else {
-        listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-      }
+      if (isGridMode) gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
+      else listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
     }
   }
 
   val hasEnoughItems = folders.size > 20
-  val scrollbarAlpha by androidx.compose.animation.core.animateFloatAsState(
-    targetValue = if (isAtTop || !hasEnoughItems) 0f else 1f,
-    animationSpec = androidx.compose.animation.core.tween(durationMillis = 200),
-    label = "scrollbarAlpha",
-  )
+  val scrollbarAlpha by androidx.compose.animation.core.animateFloatAsState(targetValue = if (isAtTop || !hasEnoughItems) 0f else 1f, animationSpec = androidx.compose.animation.core.tween(durationMillis = 200), label = "scrollbarAlpha")
 
-  PullRefreshBox(
-    isRefreshing = isRefreshing,
-    onRefresh = onRefresh,
-    listState = listState,
-    modifier = Modifier.fillMaxSize(),
-  ) {
+  PullRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, listState = listState, modifier = Modifier.fillMaxSize()) {
     if (showLoading || showEmpty) {
-      Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-      ) {
-        if (showLoading) {
-          LoadingState(
-            icon = Icons.Filled.Folder,
-            title = "Scanning for videos...",
-            message = scanStatus ?: "Please wait while we search your device",
-          )
-        } else if (showEmpty) {
-          EmptyState(
-            icon = Icons.Filled.Folder,
-            title = "No video folders found",
-            message = "Add some video files to your device to see them here",
-          )
-        }
+      Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (showLoading) LoadingState(icon = Icons.Filled.Folder, title = "Scanning for videos...", message = scanStatus ?: "Please wait while we search your device")
+        else if (showEmpty) EmptyState(icon = Icons.Filled.Folder, title = "No video folders found", message = "Add some video files to your device to see them here")
       }
     } else {
       if (isGridMode) {
-        GridContent(
-          folders = folders,
-          foldersWithNewCount = foldersWithNewCount,
-          recentlyPlayedFilePath = recentlyPlayedFilePath,
-          folderGridColumns = folderGridColumns,
-          tapThumbnailToSelect = tapThumbnailToSelect,
-          navigationBarHeight = navigationBarHeight,
-          gridState = gridState,
-          scrollbarAlpha = scrollbarAlpha,
-          selectionManager = selectionManager,
-          onFolderClick = onFolderClick,
-          onFolderLongClick = onFolderLongClick,
-        )
+        GridContent(folders = folders, foldersWithNewCount = foldersWithNewCount, recentlyPlayedFilePath = recentlyPlayedFilePath, pinnedFolders = pinnedFolders, folderGridColumns = folderGridColumns, tapThumbnailToSelect = tapThumbnailToSelect, navigationBarHeight = navigationBarHeight, gridState = gridState, scrollbarAlpha = scrollbarAlpha, selectionManager = selectionManager, onFolderClick = onFolderClick, onFolderLongClick = onFolderLongClick)
       } else {
-        ListContent(
-          folders = folders,
-          foldersWithNewCount = foldersWithNewCount,
-          recentlyPlayedFilePath = recentlyPlayedFilePath,
-          tapThumbnailToSelect = tapThumbnailToSelect,
-          navigationBarHeight = navigationBarHeight,
-          listState = listState,
-          scrollbarAlpha = scrollbarAlpha,
-          selectionManager = selectionManager,
-          onFolderClick = onFolderClick,
-          onFolderLongClick = onFolderLongClick,
-        )
+        ListContent(folders = folders, foldersWithNewCount = foldersWithNewCount, recentlyPlayedFilePath = recentlyPlayedFilePath, pinnedFolders = pinnedFolders, tapThumbnailToSelect = tapThumbnailToSelect, navigationBarHeight = navigationBarHeight, listState = listState, scrollbarAlpha = scrollbarAlpha, selectionManager = selectionManager, onFolderClick = onFolderClick, onFolderLongClick = onFolderLongClick)
       }
 
-      // Show background enrichment progress
       if (scanStatus != null && !showLoading) {
-        androidx.compose.material3.LinearProgressIndicator(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(2.dp),
-          color = MaterialTheme.colorScheme.secondary,
-          trackColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        androidx.compose.material3.LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(2.dp), color = MaterialTheme.colorScheme.secondary, trackColor = MaterialTheme.colorScheme.surfaceVariant)
       }
     }
   }
@@ -755,6 +574,7 @@ private fun GridContent(
   folders: List<VideoFolder>,
   foldersWithNewCount: List<app.marlboroadvance.mpvex.ui.browser.folderlist.FolderWithNewCount>,
   recentlyPlayedFilePath: String?,
+  pinnedFolders: Set<String>,
   folderGridColumns: Int,
   tapThumbnailToSelect: Boolean,
   navigationBarHeight: androidx.compose.ui.unit.Dp,
@@ -769,57 +589,32 @@ private fun GridContent(
       columns = GridCells.Fixed(folderGridColumns),
       state = gridState,
       modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(
-        start = 8.dp,
-        end = 8.dp,
-        bottom = navigationBarHeight
-      ),
+      contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = navigationBarHeight),
       horizontalArrangement = Arrangement.spacedBy(4.dp),
       verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
       items(folders.size) { index ->
         val folder = folders[index]
-        val isRecentlyPlayed = recentlyPlayedFilePath?.let { filePath ->
-          val file = File(filePath)
-          file.parent == folder.path
-        } ?: false
-
-        val newCount = foldersWithNewCount
-          .find { it.folder.bucketId == folder.bucketId }
-          ?.newVideoCount ?: 0
+        val isRecentlyPlayed = recentlyPlayedFilePath?.let { filePath -> File(filePath).parent == folder.path } ?: false
+        val newCount = foldersWithNewCount.find { it.folder.bucketId == folder.bucketId }?.newVideoCount ?: 0
+        val isPinned = pinnedFolders.contains(folder.path)
 
         FolderCard(
           folder = folder,
           isSelected = selectionManager.isSelected(folder),
           isRecentlyPlayed = isRecentlyPlayed,
+          isPinned = isPinned,
           onClick = { onFolderClick(folder) },
           onLongClick = { onFolderLongClick(folder) },
-          onThumbClick = if (tapThumbnailToSelect) {
-            { onFolderLongClick(folder) }
-          } else {
-            { onFolderClick(folder) }
-          },
+          onThumbClick = if (tapThumbnailToSelect) { { onFolderLongClick(folder) } } else { { onFolderClick(folder) } },
           newVideoCount = newCount,
           isGridMode = true,
         )
       }
     }
 
-    // Scrollbar with bottom padding
-    Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(bottom = navigationBarHeight)
-    ) {
-      LazyVerticalGridScrollbar(
-        state = gridState,
-        settings = ScrollbarSettings(
-          thumbUnselectedColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f * scrollbarAlpha),
-          thumbSelectedColor = MaterialTheme.colorScheme.primary.copy(alpha = scrollbarAlpha),
-        ),
-      ) {
-        // Empty content - scrollbar only
-      }
+    Box(modifier = Modifier.fillMaxSize().padding(bottom = navigationBarHeight)) {
+      LazyVerticalGridScrollbar(state = gridState, settings = ScrollbarSettings(thumbUnselectedColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f * scrollbarAlpha), thumbSelectedColor = MaterialTheme.colorScheme.primary.copy(alpha = scrollbarAlpha))) { }
     }
   }
 }
@@ -829,6 +624,7 @@ private fun ListContent(
   folders: List<VideoFolder>,
   foldersWithNewCount: List<FolderWithNewCount>,
   recentlyPlayedFilePath: String?,
+  pinnedFolders: Set<String>,
   tapThumbnailToSelect: Boolean,
   navigationBarHeight: androidx.compose.ui.unit.Dp,
   listState: LazyListState,
@@ -841,54 +637,29 @@ private fun ListContent(
     LazyColumn(
       state = listState,
       modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(
-        start = 8.dp,
-        end = 8.dp,
-        bottom = navigationBarHeight
-      ),
+      contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = navigationBarHeight),
     ) {
       items(folders) { folder ->
-        val isRecentlyPlayed = recentlyPlayedFilePath?.let { filePath ->
-          val file = File(filePath)
-          file.parent == folder.path
-        } ?: false
-
-        val newCount = foldersWithNewCount
-          .find { it.folder.bucketId == folder.bucketId }
-          ?.newVideoCount ?: 0
+        val isRecentlyPlayed = recentlyPlayedFilePath?.let { filePath -> File(filePath).parent == folder.path } ?: false
+        val newCount = foldersWithNewCount.find { it.folder.bucketId == folder.bucketId }?.newVideoCount ?: 0
+        val isPinned = pinnedFolders.contains(folder.path)
 
         FolderCard(
           folder = folder,
           isSelected = selectionManager.isSelected(folder),
           isRecentlyPlayed = isRecentlyPlayed,
+          isPinned = isPinned,
           onClick = { onFolderClick(folder) },
           onLongClick = { onFolderLongClick(folder) },
-          onThumbClick = if (tapThumbnailToSelect) {
-            { onFolderLongClick(folder) }
-          } else {
-            { onFolderClick(folder) }
-          },
+          onThumbClick = if (tapThumbnailToSelect) { { onFolderLongClick(folder) } } else { { onFolderClick(folder) } },
           newVideoCount = newCount,
           isGridMode = false,
         )
       }
     }
 
-    // Scrollbar with bottom padding
-    Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(bottom = navigationBarHeight)
-    ) {
-      LazyColumnScrollbar(
-        state = listState,
-        settings = ScrollbarSettings(
-          thumbUnselectedColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f * scrollbarAlpha),
-          thumbSelectedColor = MaterialTheme.colorScheme.primary.copy(alpha = scrollbarAlpha),
-        ),
-      ) {
-        // Empty content - scrollbar only
-      }
+    Box(modifier = Modifier.fillMaxSize().padding(bottom = navigationBarHeight)) {
+      LazyColumnScrollbar(state = listState, settings = ScrollbarSettings(thumbUnselectedColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f * scrollbarAlpha), thumbSelectedColor = MaterialTheme.colorScheme.primary.copy(alpha = scrollbarAlpha))) { }
     }
   }
 }
@@ -924,29 +695,11 @@ private fun FolderSortDialog(
   val videoGridColumns = if (isLandscape) videoGridColumnsLandscape else videoGridColumnsPortrait
 
   val folderGridColumnSelector = if (mediaLayoutMode == MediaLayoutMode.GRID) {
-    GridColumnSelector(
-      label = "Grid Columns (${if (isLandscape) "Landscape" else "Portrait"})",
-      currentValue = folderGridColumns,
-      onValueChange = {
-        if (isLandscape) browserPreferences.folderGridColumnsLandscape.set(it)
-        else browserPreferences.folderGridColumnsPortrait.set(it)
-      },
-      valueRange = if (isLandscape) 3f..5f else 2f..4f,
-      steps = if (isLandscape) 1 else 1,
-    )
+    GridColumnSelector(label = "Grid Columns (${if (isLandscape) "Landscape" else "Portrait"})", currentValue = folderGridColumns, onValueChange = { if (isLandscape) browserPreferences.folderGridColumnsLandscape.set(it) else browserPreferences.folderGridColumnsPortrait.set(it) }, valueRange = if (isLandscape) 3f..5f else 2f..4f, steps = 1)
   } else null
 
   val videoGridColumnSelector = if (mediaLayoutMode == MediaLayoutMode.GRID) {
-    GridColumnSelector(
-      label = "Video Grid Columns (${if (isLandscape) "Landscape" else "Portrait"})",
-      currentValue = videoGridColumns,
-      onValueChange = {
-        if (isLandscape) browserPreferences.videoGridColumnsLandscape.set(it)
-        else browserPreferences.videoGridColumnsPortrait.set(it)
-      },
-      valueRange = if (isLandscape) 3f..5f else 1f..3f,
-      steps = if (isLandscape) 1 else 1,
-    )
+    GridColumnSelector(label = "Video Grid Columns (${if (isLandscape) "Landscape" else "Portrait"})", currentValue = videoGridColumns, onValueChange = { if (isLandscape) browserPreferences.videoGridColumnsLandscape.set(it) else browserPreferences.videoGridColumnsPortrait.set(it) }, valueRange = if (isLandscape) 3f..5f else 1f..3f, steps = 1)
   } else null
 
   val isAlbumView = folderViewMode == FolderViewMode.AlbumView
@@ -956,25 +709,11 @@ private fun FolderSortDialog(
     onDismiss = onDismiss,
     title = if (isAlbumView) "Sort & View Options" else "View Options",
     sortType = sortType.displayName,
-    onSortTypeChange = { typeName ->
-      FolderSortType.entries
-        .find { it.displayName == typeName }
-        ?.let(onSortTypeChange)
-    },
+    onSortTypeChange = { typeName -> FolderSortType.entries.find { it.displayName == typeName }?.let(onSortTypeChange) },
     sortOrderAsc = sortOrder.isAscending,
-    onSortOrderChange = { isAsc ->
-      onSortOrderChange(if (isAsc) SortOrder.Ascending else SortOrder.Descending)
-    },
-    types = listOf(
-      FolderSortType.Title.displayName,
-      FolderSortType.Date.displayName,
-      FolderSortType.Size.displayName,
-    ),
-    icons = listOf(
-      Icons.Filled.Title,
-      Icons.Filled.CalendarToday,
-      Icons.Filled.SwapVert,
-    ),
+    onSortOrderChange = { isAsc -> onSortOrderChange(if (isAsc) SortOrder.Ascending else SortOrder.Descending) },
+    types = listOf(FolderSortType.Title.displayName, FolderSortType.Date.displayName, FolderSortType.Size.displayName),
+    icons = listOf(Icons.Filled.Title, Icons.Filled.CalendarToday, Icons.Filled.SwapVert),
     getLabelForType = { type, _ ->
       when (type) {
         FolderSortType.Title.displayName -> Pair("A-Z", "Z-A")
@@ -984,73 +723,21 @@ private fun FolderSortDialog(
       }
     },
     showSortOptions = isAlbumView,
-    viewModeSelector = ViewModeSelector(
-      label = "View Mode",
-      firstOptionLabel = "Folder",
-      secondOptionLabel = "Tree",
-      firstOptionIcon = Icons.Filled.ViewModule,
-      secondOptionIcon = Icons.Filled.AccountTree,
-      isFirstOptionSelected = folderViewMode == FolderViewMode.AlbumView,
-      onViewModeChange = { isFirstOption ->
-        browserPreferences.folderViewMode.set(
-          if (isFirstOption) FolderViewMode.AlbumView else FolderViewMode.FileManager,
-        )
-      },
-    ),
-    layoutModeSelector = ViewModeSelector(
-      label = "Layout",
-      firstOptionLabel = "List",
-      secondOptionLabel = "Grid",
-      firstOptionIcon = Icons.AutoMirrored.Filled.ViewList,
-      secondOptionIcon = Icons.Filled.GridView,
-      isFirstOptionSelected = mediaLayoutMode == MediaLayoutMode.LIST,
-      onViewModeChange = { isFirstOption ->
-        browserPreferences.mediaLayoutMode.set(
-          if (isFirstOption) MediaLayoutMode.LIST else MediaLayoutMode.GRID
-        )
-      },
-    ),
+    viewModeSelector = ViewModeSelector(label = "View Mode", firstOptionLabel = "Folder", secondOptionLabel = "Tree", firstOptionIcon = Icons.Filled.ViewModule, secondOptionIcon = Icons.Filled.AccountTree, isFirstOptionSelected = folderViewMode == FolderViewMode.AlbumView, onViewModeChange = { isFirstOption -> browserPreferences.folderViewMode.set(if (isFirstOption) FolderViewMode.AlbumView else FolderViewMode.FileManager) }),
+    layoutModeSelector = ViewModeSelector(label = "Layout", firstOptionLabel = "List", secondOptionLabel = "Grid", firstOptionIcon = Icons.AutoMirrored.Filled.ViewList, secondOptionIcon = Icons.Filled.GridView, isFirstOptionSelected = mediaLayoutMode == MediaLayoutMode.LIST, onViewModeChange = { isFirstOption -> browserPreferences.mediaLayoutMode.set(if (isFirstOption) MediaLayoutMode.LIST else MediaLayoutMode.GRID) }),
     visibilityToggles = listOf(
-      VisibilityToggle(
-        label = "Full Name",
-        checked = unlimitedNameLines,
-        onCheckedChange = { appearancePreferences.unlimitedNameLines.set(it) },
-      ),
-      VisibilityToggle(
-        label = "Path",
-        checked = showFolderPath,
-        onCheckedChange = { browserPreferences.showFolderPath.set(it) },
-      ),
-      VisibilityToggle(
-        label = "Total Videos",
-        checked = showTotalVideosChip,
-        onCheckedChange = { browserPreferences.showTotalVideosChip.set(it) },
-      ),
-      VisibilityToggle(
-        label = "Total Duration",
-        checked = showTotalDurationChip,
-        onCheckedChange = { browserPreferences.showTotalDurationChip.set(it) },
-      ),
-      VisibilityToggle(
-        label = "Folder Size",
-        checked = showTotalSizeChip,
-        onCheckedChange = { browserPreferences.showTotalSizeChip.set(it) },
-      ),
-      VisibilityToggle(
-        label = "Date",
-        checked = showDateChip,
-        onCheckedChange = { browserPreferences.showDateChip.set(it) },
-      ),
+      VisibilityToggle(label = "Full Name", checked = unlimitedNameLines, onCheckedChange = { appearancePreferences.unlimitedNameLines.set(it) }),
+      VisibilityToggle(label = "Path", checked = showFolderPath, onCheckedChange = { browserPreferences.showFolderPath.set(it) }),
+      VisibilityToggle(label = "Total Videos", checked = showTotalVideosChip, onCheckedChange = { browserPreferences.showTotalVideosChip.set(it) }),
+      VisibilityToggle(label = "Total Duration", checked = showTotalDurationChip, onCheckedChange = { browserPreferences.showTotalDurationChip.set(it) }),
+      VisibilityToggle(label = "Folder Size", checked = showTotalSizeChip, onCheckedChange = { browserPreferences.showTotalSizeChip.set(it) }),
+      VisibilityToggle(label = "Date", checked = showDateChip, onCheckedChange = { browserPreferences.showDateChip.set(it) }),
     ),
     folderGridColumnSelector = folderGridColumnSelector,
     videoGridColumnSelector = videoGridColumnSelector,
   )
 }
 
-
-/**
- * Displays search results based on the user's layout preference (grid or list)
- */
 @Composable
 private fun SearchResultsContent(
   searchResults: List<FileSystemItem>,
@@ -1061,15 +748,7 @@ private fun SearchResultsContent(
   folderGridColumns: Int,
 ) {
   val folders = searchResults.filterIsInstance<FileSystemItem.Folder>().map { folder ->
-    app.marlboroadvance.mpvex.domain.media.model.VideoFolder(
-      bucketId = folder.path,  // Use path as bucketId since FileSystemItem.Folder doesn't have bucketId
-      name = folder.name,
-      path = folder.path,
-      videoCount = folder.videoCount,
-      totalSize = folder.totalSize,
-      totalDuration = folder.totalDuration,
-      lastModified = folder.lastModified
-    )
+    app.marlboroadvance.mpvex.domain.media.model.VideoFolder(bucketId = folder.path, name = folder.name, path = folder.path, videoCount = folder.videoCount, totalSize = folder.totalSize, totalDuration = folder.totalDuration, lastModified = folder.lastModified)
   }
   val videos = searchResults.filterIsInstance<FileSystemItem.VideoFile>().map { it.video }
   
@@ -1077,141 +756,49 @@ private fun SearchResultsContent(
   
   Box(modifier = Modifier.fillMaxSize()) {
     if (isGridMode) {
-      LazyVerticalGrid(
-        columns = GridCells.Fixed(folderGridColumns),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-          start = 8.dp,
-          end = 8.dp,
-          top = 8.dp,
-          bottom = navigationBarHeight + 8.dp
-        ),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-      ) {
+      LazyVerticalGrid(columns = GridCells.Fixed(folderGridColumns), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = navigationBarHeight + 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         items(folders.size) { index ->
           val folder = folders[index]
-          FolderCard(
-            folder = folder,
-            isSelected = false,
-            isRecentlyPlayed = false,
-            onClick = { onFolderClick(folder) },
-            onLongClick = {},
-            onThumbClick = { onFolderClick(folder) },
-            newVideoCount = 0,
-            isGridMode = true,
-          )
+          FolderCard(folder = folder, isSelected = false, isRecentlyPlayed = false, onClick = { onFolderClick(folder) }, onLongClick = {}, onThumbClick = { onFolderClick(folder) }, newVideoCount = 0, isGridMode = true)
         }
-        
         items(videos.size) { index ->
           val video = videos[index]
-          VideoCard(
-            video = video,
-            isSelected = false,
-            onClick = { onVideoClick(video) },
-            onLongClick = {},
-            onThumbClick = { onVideoClick(video) },
-            isGridMode = true,
-          )
+          VideoCard(video = video, isSelected = false, onClick = { onVideoClick(video) }, onLongClick = {}, onThumbClick = { onVideoClick(video) }, isGridMode = true)
         }
       }
     } else {
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-          start = 8.dp,
-          end = 8.dp,
-          top = 8.dp,
-          bottom = navigationBarHeight + 8.dp
-        ),
-      ) {
+      LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = navigationBarHeight + 8.dp)) {
         items(folders.size) { index ->
           val folder = folders[index]
-          FolderCard(
-            folder = folder,
-            isSelected = false,
-            isRecentlyPlayed = false,
-            onClick = { onFolderClick(folder) },
-            onLongClick = {},
-            onThumbClick = { onFolderClick(folder) },
-            newVideoCount = 0,
-            isGridMode = false,
-          )
+          FolderCard(folder = folder, isSelected = false, isRecentlyPlayed = false, onClick = { onFolderClick(folder) }, onLongClick = {}, onThumbClick = { onFolderClick(folder) }, newVideoCount = 0, isGridMode = false)
         }
-        
         items(videos.size) { index ->
           val video = videos[index]
-          VideoCard(
-            video = video,
-            isSelected = false,
-            onClick = { onVideoClick(video) },
-            onLongClick = {},
-            onThumbClick = { onVideoClick(video) },
-            isGridMode = false,
-          )
+          VideoCard(video = video, isSelected = false, onClick = { onVideoClick(video) }, onLongClick = {}, onThumbClick = { onVideoClick(video) }, isGridMode = false)
         }
       }
     }
   }
 }
 
-/**
- * Searches for folders and videos matching the query
- * Returns FileSystemItem results containing matching folders and videos
- */
-private suspend fun searchFoldersAndVideos(
-  context: Context,
-  query: String,
-): List<FileSystemItem> {
+private suspend fun searchFoldersAndVideos(context: Context, query: String): List<FileSystemItem> {
   val folderResults = mutableListOf<FileSystemItem>()
   val videoResults = mutableListOf<FileSystemItem>()
-  
   try {
-    Log.d("FolderListScreen", "Searching for: $query")
-    
-    // Get all video folders
-    val folders = app.marlboroadvance.mpvex.repository.MediaFileRepository
-      .getAllVideoFoldersFast(context)
-    
-    // Search in folders
+    val folders = app.marlboroadvance.mpvex.repository.MediaFileRepository.getAllVideoFoldersFast(context)
     folders.forEach { folder ->
-      if (folder.name.contains(query, ignoreCase = true) || 
-          folder.path.contains(query, ignoreCase = true)) {
-        folderResults.add(
-          FileSystemItem.Folder(
-            name = folder.name,
-            path = folder.path,
-            lastModified = folder.lastModified,
-            videoCount = folder.videoCount,
-            totalSize = folder.totalSize,
-            totalDuration = folder.totalDuration,
-          )
-        )
+      if (folder.name.contains(query, ignoreCase = true) || folder.path.contains(query, ignoreCase = true)) {
+        folderResults.add(FileSystemItem.Folder(name = folder.name, path = folder.path, lastModified = folder.lastModified, videoCount = folder.videoCount, totalSize = folder.totalSize, totalDuration = folder.totalDuration))
       }
-      
-      // Also search within videos in this folder
-      val videos = app.marlboroadvance.mpvex.repository.MediaFileRepository
-        .getVideosInFolder(context, folder.bucketId)
-      
+      val videos = app.marlboroadvance.mpvex.repository.MediaFileRepository.getVideosInFolder(context, folder.bucketId)
       videos.forEach { video ->
         if (video.displayName.contains(query, ignoreCase = true)) {
-          videoResults.add(
-            FileSystemItem.VideoFile(
-              name = video.displayName,
-              path = video.path,
-              lastModified = video.dateModified,
-              video = video,
-            )
-          )
+          videoResults.add(FileSystemItem.VideoFile(name = video.displayName, path = video.path, lastModified = video.dateModified, video = video))
         }
       }
     }
-    
-    Log.d("FolderListScreen", "Found ${folderResults.size + videoResults.size} results for: $query")
   } catch (e: Exception) {
     Log.e("FolderListScreen", "Error searching folders and videos", e)
   }
-  
-  // Return folders first, then videos
   return folderResults + videoResults
 }
