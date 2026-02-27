@@ -80,7 +80,8 @@ data class PlaylistItem(
   val isWatched: Boolean = false,  
   val path: String = "", 
   val duration: String = "", 
-  val resolution: String = "", 
+  val resolution: String = "",
+  val isNew: Boolean = false, // <-- Naya variable added
 )
 
 class LRUBitmapCache(private val maxSize: Int) {
@@ -125,6 +126,20 @@ private fun extractVideoId(uri: Uri, context: Context): Long? {
       if (cursor.moveToFirst()) cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)) else null
     }
   } catch (e: Exception) { null }
+}
+
+@Composable
+fun PlaylistBadge(text: String, bgColor: Color, textColor: Color, isBold: Boolean = false, isExtraBold: Boolean = false) {
+    Surface(color = bgColor, shape = RoundedCornerShape(4.dp)) {
+        Box(modifier = Modifier.height(18.dp).padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
+            val weight = when {
+                isExtraBold -> FontWeight.ExtraBold
+                isBold -> FontWeight.SemiBold
+                else -> FontWeight.Normal
+            }
+            Text(text = text, style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = weight), color = textColor)
+        }
+    }
 }
 
 @Composable
@@ -239,30 +254,20 @@ fun PlaylistTrackListItem(
         
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
           if (item.duration.isNotEmpty()) {
-            Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = RoundedCornerShape(4.dp)) {
-              Text(text = item.duration, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            PlaylistBadge(item.duration, MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurfaceVariant)
           }
-          
           if (item.resolution.isNotEmpty()) {
-            Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = RoundedCornerShape(4.dp)) {
-              Text(text = item.resolution, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            PlaylistBadge(item.resolution, MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurfaceVariant)
           }
-
-          // FIX: NEW LABEL ALIGNED, SMALLER, AND HIDES WHEN PLAYING
-          if (!item.isPlaying && item.progressPercent <= 0f && !item.isWatched) {
-            Surface(color = Color(0xFFD32F2F), shape = RoundedCornerShape(4.dp)) {
-              Text(text = "NEW", modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, fontSize = 8.sp), color = Color.White)
-            }
+          // Yahan hum strictly DB condition check karenge NEW label ke liye
+          if (item.isNew && !item.isPlaying) {
+            PlaylistBadge("NEW", Color(0xFFD32F2F), Color.White, isExtraBold = true)
           }
         }
       }
 
       if (item.isPlaying) {
-        Surface(color = accentColor.copy(alpha = 0.15f), shape = RoundedCornerShape(16.dp)) {
-          Text(text = "Playing", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, color = accentColor))
-        }
+        PlaylistBadge("Playing", accentColor.copy(alpha = 0.15f), accentColor, isBold = true)
       }
     }
   }
@@ -317,18 +322,15 @@ fun PlaylistTrackGridItem(
 
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(text = item.title, modifier = Modifier.height(44.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (item.isPlaying) FontWeight.Bold else FontWeight.Medium, fontSize = 14.sp, color = if (item.isPlaying) accentColor else if (item.isWatched) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
           if (item.resolution.isNotEmpty()) {
-            Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = RoundedCornerShape(4.dp)) {
-              Text(text = item.resolution, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            PlaylistBadge(item.resolution, MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurfaceVariant)
           }
-
-          // FIX: NEW LABEL ALIGNED, SMALLER, AND HIDES WHEN PLAYING
-          if (!item.isPlaying && item.progressPercent <= 0f && !item.isWatched) {
-            Surface(color = Color(0xFFD32F2F), shape = RoundedCornerShape(4.dp)) {
-              Text(text = "NEW", modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, fontSize = 8.sp), color = Color.White)
-            }
+          if (item.isPlaying) {
+            PlaylistBadge("Playing", accentColor.copy(alpha = 0.15f), accentColor, isBold = true)
+          } else if (item.isNew) {
+            PlaylistBadge("NEW", Color(0xFFD32F2F), Color.White, isExtraBold = true)
           }
         }
       }
