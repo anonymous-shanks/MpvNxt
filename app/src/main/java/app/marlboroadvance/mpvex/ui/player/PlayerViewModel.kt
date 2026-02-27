@@ -1575,10 +1575,10 @@ class PlayerViewModel(
         isPlaying = isCurrentlyPlaying,
         path = path,
         progressPercent = if (isCurrentlyPlaying) currentProgress else 0f,
-        isWatched = isCurrentlyPlaying && currentProgress >= 95f, // PEHLE WALA LOGIC WAISE HI RAKHA HAI
+        isWatched = isCurrentlyPlaying && currentProgress >= 95f, 
         duration = durationStr,
         resolution = resolutionStr,
-        isNew = false // Isko refreshPlaylistItems theek karega
+        isNew = false 
       )
     }
   }
@@ -1647,7 +1647,7 @@ class PlayerViewModel(
     viewModelScope.launch(Dispatchers.IO) {
       val baseItems = getPlaylistData()
       if (baseItems != null) {
-        // Yahan database check hota hai ki video New hai ya nahi (bina isWatched ko chhede)
+        
         val updatedItems = baseItems.map { item ->
           if (item.isPlaying) {
             item.copy(isNew = false)
