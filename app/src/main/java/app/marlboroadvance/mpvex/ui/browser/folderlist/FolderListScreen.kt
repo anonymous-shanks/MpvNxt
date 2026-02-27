@@ -1229,5 +1229,3 @@ private suspend fun searchFoldersAndVideos(
   
   return results
 }
-
-}
