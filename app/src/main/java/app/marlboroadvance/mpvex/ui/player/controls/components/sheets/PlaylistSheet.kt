@@ -572,10 +572,10 @@ fun PlaylistTrackListItem(
             LoadingChip(width = 60.dp)
           }
 
-          // NEW Label
+          // NEW Label (Red Color)
           if (item.isNew && !item.isPlaying) {
             Surface(
-              color = MaterialTheme.colorScheme.primaryContainer,
+              color = Color(0xFFE53935), // Material Red 600
               shape = RoundedCornerShape(4.dp),
             ) {
               Text(
@@ -585,7 +585,7 @@ fun PlaylistTrackListItem(
                   fontSize = 10.sp,
                   fontWeight = FontWeight.ExtraBold,
                 ),
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = Color.White,
               )
             }
           }
@@ -817,10 +817,10 @@ fun PlaylistTrackGridItem(
             LoadingChip(width = 60.dp)
           }
 
-          // NEW Label for grid view
+          // NEW Label for grid view (Red Color)
           if (item.isNew && !item.isPlaying) {
             Surface(
-              color = MaterialTheme.colorScheme.primaryContainer,
+              color = Color(0xFFE53935), // Material Red 600
               shape = RoundedCornerShape(4.dp),
             ) {
               Text(
@@ -830,7 +830,7 @@ fun PlaylistTrackGridItem(
                   fontSize = 10.sp,
                   fontWeight = FontWeight.ExtraBold,
                 ),
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = Color.White,
               )
             }
           }
