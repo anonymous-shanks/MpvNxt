@@ -395,6 +395,7 @@ fun StandardSeekbar(
     val baseTrackHeight = if (isThick) 16.dp else 6.dp
     val trackHeightDp = baseTrackHeight * heightFraction 
     
+    // Circular ke liye 24.dp set kiya hai taaki wo video bounds ke andar naturally fit ho jaye
     val logicalThumbWidth = if (isCircular) 24.dp else if (isThick) 6.dp else 4.dp 
     val thumbHeight = if (isCircular) 24.dp else 16.dp
     val thumbShape = if (isThick) RoundedCornerShape(logicalThumbWidth / 2) else CircleShape
@@ -472,12 +473,12 @@ fun StandardSeekbar(
         },
         thumb = {
             if (isCircular) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(logicalThumbWidth)) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val center = Offset(size.width / 2f, size.height / 2f)
-                        drawCircle(color = primaryColor.copy(alpha = 0.2f), radius = 12.dp.toPx(), center = center)
-                        drawCircle(color = primaryColor, radius = 7.dp.toPx(), center = center)
-                    }
+                Box(
+                    contentAlignment = Alignment.Center, 
+                    modifier = Modifier.size(logicalThumbWidth) // Slider ki internal padding ko theek rakhne ke liye
+                ) {
+                    Box(modifier = Modifier.size(24.dp).background(primaryColor.copy(alpha = 0.2f), CircleShape))
+                    Box(modifier = Modifier.size(14.dp).background(primaryColor, CircleShape))
                 }
             } else {
                 Box(modifier = Modifier.width(logicalThumbWidth).height(thumbHeight).background(primaryColor, thumbShape))
