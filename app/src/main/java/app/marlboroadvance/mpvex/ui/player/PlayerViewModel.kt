@@ -1631,8 +1631,8 @@ class PlayerViewModel(
     }
 
     // Check if played
-    val playbackState = playbackStateDao.getPlaybackState(uri.toString())
-    return playbackState == null || playbackState.position <= 0L
+    val playbackState = playbackStateDao.getVideoDataByTitle(uri.toString())
+    return playbackState == null || playbackState.lastPosition <= 0
   }
 
   private fun getVideoMetadata(uri: Uri): Pair<String, String> {
