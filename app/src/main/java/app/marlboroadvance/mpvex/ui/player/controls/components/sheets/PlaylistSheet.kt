@@ -76,6 +76,7 @@ data class PlaylistItem(
   val isPlaying: Boolean,
   val progressPercent: Float = 0f, // 0-100, progress of video watched
   val isWatched: Boolean = false,  // True if video is fully watched (100%)
+  val isNew: Boolean = false,      // Naya added feature: Check if video is new/unplayed
   val path: String = "", // Video path for thumbnail loading
   val duration: String = "", // Duration in formatted string (e.g., "10:30")
   val resolution: String = "", // Resolution (e.g., "1920x1080")
@@ -528,9 +529,10 @@ fun PlaylistTrackListItem(
           overflow = TextOverflow.Ellipsis,
         )
 
-        // Duration and resolution chips - always show with loading state if empty
+        // Duration, resolution and new chips - aligned vertically
         Row(
           horizontalArrangement = Arrangement.spacedBy(6.dp),
+          verticalAlignment = Alignment.CenterVertically,
         ) {
           // Duration chip
           if (item.duration.isNotEmpty()) {
@@ -568,6 +570,24 @@ fun PlaylistTrackListItem(
             }
           } else {
             LoadingChip(width = 60.dp)
+          }
+
+          // NEW Label
+          if (item.isNew && !item.isPlaying) {
+            Surface(
+              color = MaterialTheme.colorScheme.primaryContainer,
+              shape = RoundedCornerShape(4.dp),
+            ) {
+              Text(
+                text = "NEW",
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall.copy(
+                  fontSize = 10.sp,
+                  fontWeight = FontWeight.ExtraBold,
+                ),
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+              )
+            }
           }
         }
       }
@@ -773,7 +793,7 @@ fun PlaylistTrackGridItem(
           overflow = TextOverflow.Ellipsis,
         )
 
-        // Resolution and status
+        // Resolution, New label, and status
         Row(
           horizontalArrangement = Arrangement.spacedBy(6.dp),
           verticalAlignment = Alignment.CenterVertically,
@@ -795,6 +815,24 @@ fun PlaylistTrackGridItem(
             }
           } else {
             LoadingChip(width = 60.dp)
+          }
+
+          // NEW Label for grid view
+          if (item.isNew && !item.isPlaying) {
+            Surface(
+              color = MaterialTheme.colorScheme.primaryContainer,
+              shape = RoundedCornerShape(4.dp),
+            ) {
+              Text(
+                text = "NEW",
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall.copy(
+                  fontSize = 10.sp,
+                  fontWeight = FontWeight.ExtraBold,
+                ),
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+              )
+            }
           }
 
           if (item.isPlaying) {
