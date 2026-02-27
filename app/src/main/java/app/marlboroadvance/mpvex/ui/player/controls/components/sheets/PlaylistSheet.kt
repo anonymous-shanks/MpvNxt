@@ -81,7 +81,7 @@ data class PlaylistItem(
   val path: String = "", 
   val duration: String = "", 
   val resolution: String = "",
-  val isNew: Boolean = false, // <-- DB se check ho kar aayega
+  val isNew: Boolean = false,
 )
 
 class LRUBitmapCache(private val maxSize: Int) {
@@ -259,7 +259,7 @@ fun PlaylistTrackListItem(
           if (item.resolution.isNotEmpty()) {
             PlaylistBadge(item.resolution, MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurfaceVariant)
           }
-          // Yahan hum strictly DB condition check karenge NEW label ke liye
+          
           if (item.isNew && !item.isPlaying) {
             PlaylistBadge("NEW", Color(0xFFD32F2F), Color.White, isExtraBold = true)
           }
