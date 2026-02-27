@@ -45,6 +45,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -83,7 +85,7 @@ fun SeekbarWithTimers(
   var isUserInteracting by remember { mutableStateOf(false) }
   var userPosition by remember { mutableFloatStateOf(position) }
   
-  // Yahan hum explicitly width store karenge taaki compiler confuse na ho
+  // Explicitly width store kar rahe hain taaki "width(...)" wala error dubara na aaye
   var seekbarWidth by remember { mutableFloatStateOf(1f) }
 
   val animatedPosition = remember { Animatable(position) }
@@ -118,11 +120,11 @@ fun SeekbarWithTimers(
     ) {
       Box(
         modifier = Modifier.fillMaxWidth().height(64.dp)
-          .onSizeChanged { seekbarWidth = it.width.toFloat().coerceAtLeast(1f) } // Width update
-          .pointerInput(Unit) {
+          .onSizeChanged { seekbarWidth = it.width.toFloat().coerceAtLeast(1f) } 
+          .pointerInput("tap") {
             detectTapGestures(
               onTap = { offset ->
-                val newPosition = (offset.x / seekbarWidth) * duration // Safe division
+                val newPosition = (offset.x / seekbarWidth) * duration 
                 if (!isUserInteracting) isUserInteracting = true
                 userPosition = newPosition.coerceIn(0f, duration)
                 onValueChange(userPosition)
@@ -134,7 +136,7 @@ fun SeekbarWithTimers(
               }
             )
           }
-          .pointerInput(Unit) {
+          .pointerInput("drag") {
             detectDragGestures(
               onDragStart = { isUserInteracting = true },
               onDragEnd = { 
@@ -155,7 +157,7 @@ fun SeekbarWithTimers(
               },
             ) { change, _ ->
               change.consume()
-              val newPosition = (change.position.x / seekbarWidth) * duration // Safe division
+              val newPosition = (change.position.x / seekbarWidth) * duration 
               userPosition = newPosition.coerceIn(0f, duration)
               onValueChange(userPosition)
             }
@@ -400,7 +402,6 @@ fun StandardSeekbar(
     val baseTrackHeight = if (isThick) 16.dp else 6.dp
     val trackHeightDp = baseTrackHeight * heightFraction 
     
-    // Circular ke liye 24.dp set kiya hai taaki wo video bounds ke andar naturally fit ho jaye
     val logicalThumbWidth = if (isCircular) 24.dp else if (isThick) 6.dp else 4.dp 
     val thumbHeight = if (isCircular) 24.dp else 16.dp
     val thumbShape = if (isThick) RoundedCornerShape(logicalThumbWidth / 2) else CircleShape
@@ -480,7 +481,7 @@ fun StandardSeekbar(
             if (isCircular) {
                 Box(
                     contentAlignment = Alignment.Center, 
-                    modifier = Modifier.size(logicalThumbWidth) // Slider ki internal padding ko theek rakhne ke liye
+                    modifier = Modifier.size(logicalThumbWidth) 
                 ) {
                     Box(modifier = Modifier.size(24.dp).background(primaryColor.copy(alpha = 0.2f), CircleShape))
                     Box(modifier = Modifier.size(14.dp).background(primaryColor, CircleShape))
