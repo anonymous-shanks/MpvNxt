@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -81,6 +82,9 @@ fun SeekbarWithTimers(
   val clickEvent = LocalPlayerButtonsClickEvent.current
   var isUserInteracting by remember { mutableStateOf(false) }
   var userPosition by remember { mutableFloatStateOf(position) }
+  
+  // Yahan hum explicitly width store karenge taaki compiler confuse na ho
+  var seekbarWidth by remember { mutableFloatStateOf(1f) }
 
   val animatedPosition = remember { Animatable(position) }
   val scope = rememberCoroutineScope()
@@ -114,10 +118,11 @@ fun SeekbarWithTimers(
     ) {
       Box(
         modifier = Modifier.fillMaxWidth().height(64.dp)
+          .onSizeChanged { seekbarWidth = it.width.toFloat().coerceAtLeast(1f) } // Width update
           .pointerInput(Unit) {
             detectTapGestures(
               onTap = { offset ->
-                val newPosition = (offset.x / size.width) * duration
+                val newPosition = (offset.x / seekbarWidth) * duration // Safe division
                 if (!isUserInteracting) isUserInteracting = true
                 userPosition = newPosition.coerceIn(0f, duration)
                 onValueChange(userPosition)
@@ -150,7 +155,7 @@ fun SeekbarWithTimers(
               },
             ) { change, _ ->
               change.consume()
-              val newPosition = (change.position.x / size.width) * duration
+              val newPosition = (change.position.x / seekbarWidth) * duration // Safe division
               userPosition = newPosition.coerceIn(0f, duration)
               onValueChange(userPosition)
             }
