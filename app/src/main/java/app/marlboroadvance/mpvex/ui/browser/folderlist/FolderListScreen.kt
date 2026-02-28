@@ -519,7 +519,7 @@ object FolderListScreen : Screen {
                     Icon(
                       painter = rememberVectorPainter(imageVector),
                       contentDescription = null,
-                      modifier = androidx.compose.material3.ToggleFloatingActionButtonDefaults.animateIcon({ checkedProgress })
+                      modifier = Modifier.animateIcon({ checkedProgress })
                     )
                   }
                 }
@@ -535,6 +535,10 @@ object FolderListScreen : Screen {
                     isFabExpanded.value = !isFabExpanded.value 
                   },
                 ) {
+                  val checkedProgress by animateFloatAsState(
+                      targetValue = if (isFabExpanded.value) 1f else 0f,
+                      label = "fab_anim"
+                    )
                   val imageVector by remember {
                     derivedStateOf {
                       if (checkedProgress > 0.5f) Icons.Filled.Close else Icons.Filled.PlayArrow
