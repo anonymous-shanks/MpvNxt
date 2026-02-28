@@ -1,33 +1,30 @@
 package app.marlboroadvance.mpvex.ui.browser.components
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material.icons.filled.ViewComfy
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -51,7 +48,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -65,9 +61,13 @@ import app.marlboroadvance.mpvex.preferences.AppearancePreferences
 import app.marlboroadvance.mpvex.preferences.preference.collectAsState
 import app.marlboroadvance.mpvex.ui.theme.DarkMode
 import app.marlboroadvance.mpvex.ui.theme.LocalThemeTransitionState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
+/**
+ * Unified top bar for browser screens that switches between normal and selection modes
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun BrowserTopBar(
@@ -87,152 +87,447 @@ fun BrowserTopBar(
   onInfoClick: (() -> Unit)? = null,
   onShareClick: (() -> Unit)? = null,
   onPlayClick: (() -> Unit)? = null,
-  onAddToPlaylistClick: (() -> Unit)? = null,
-  onPinClick: (() -> Unit)? = null,
-  isAllPinned: Boolean = false,
-  isMixedPin: Boolean = false,
-  showMoveControls: Boolean = false,
-  isFirstPinned: Boolean = false,
-  isLastPinned: Boolean = false,
-  onMoveUpClick: (() -> Unit)? = null,
-  onMoveDownClick: (() -> Unit)? = null,
   onBlacklistClick: (() -> Unit)? = null,
   onSelectAll: (() -> Unit)? = null,
   onInvertSelection: (() -> Unit)? = null,
   onDeselectAll: (() -> Unit)? = null,
+  onPinClick: (() -> Unit)? = null,
+  isPinned: Boolean = false,
+  onAddToPlaylistClick: (() -> Unit)? = null,
   additionalActions: @Composable RowScope.() -> Unit = { },
   onTitleLongPress: (() -> Unit)? = null,
   useRemoveIcon: Boolean = false,
 ) {
   if (isInSelectionMode) {
     SelectionTopBar(
-      selectedCount = selectedCount, totalCount = totalCount, onCancel = onCancelSelection, onDelete = onDeleteClick,
-      onRename = onRenameClick, isSingleSelection = isSingleSelection, onInfo = onInfoClick, onShare = onShareClick,
-      onPlay = onPlayClick, onAddToPlaylist = onAddToPlaylistClick, onPinClick = onPinClick, isAllPinned = isAllPinned,
-      isMixedPin = isMixedPin, showMoveControls = showMoveControls, isFirstPinned = isFirstPinned, isLastPinned = isLastPinned,
-      onMoveUpClick = onMoveUpClick, onMoveDownClick = onMoveDownClick, onBlacklist = onBlacklistClick, onSelectAll = onSelectAll,
-      onInvertSelection = onInvertSelection, onDeselectAll = onDeselectAll, modifier = modifier, useRemoveIcon = useRemoveIcon,
+      selectedCount = selectedCount,
+      totalCount = totalCount,
+      onCancel = onCancelSelection,
+      onDelete = onDeleteClick,
+      onRename = onRenameClick,
+      isSingleSelection = isSingleSelection,
+      onInfo = onInfoClick,
+      onShare = onShareClick,
+      onPlay = onPlayClick,
+      onBlacklist = onBlacklistClick,
+      onPinClick = onPinClick,
+      isPinned = isPinned,
+      onAddToPlaylistClick = onAddToPlaylistClick,
+      onSelectAll = onSelectAll,
+      onInvertSelection = onInvertSelection,
+      onDeselectAll = onDeselectAll,
+      modifier = modifier,
+      useRemoveIcon = useRemoveIcon,
     )
   } else {
-    NormalTopBar(title = title, onBackClick = onBackClick, onSortClick = onSortClick, onSearchClick = onSearchClick, onSettingsClick = onSettingsClick, additionalActions = additionalActions, modifier = modifier, onTitleLongPress = onTitleLongPress)
+    NormalTopBar(
+      title = title,
+      onBackClick = onBackClick,
+      onSortClick = onSortClick,
+      onSearchClick = onSearchClick,
+      onSettingsClick = onSettingsClick,
+      additionalActions = additionalActions,
+      modifier = modifier,
+      onTitleLongPress = onTitleLongPress,
+    )
   }
 }
 
+/**
+ * Normal mode top bar
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun NormalTopBar(title: String, onBackClick: (() -> Unit)?, onSortClick: (() -> Unit)?, onSearchClick: (() -> Unit)?, onSettingsClick: (() -> Unit)?, additionalActions: @Composable RowScope.() -> Unit, modifier: Modifier = Modifier, onTitleLongPress: (() -> Unit)?) {
+private fun NormalTopBar(
+  title: String,
+  onBackClick: (() -> Unit)?,
+  onSortClick: (() -> Unit)?,
+  onSearchClick: (() -> Unit)?,
+  onSettingsClick: (() -> Unit)?,
+  additionalActions: @Composable RowScope.() -> Unit,
+  modifier: Modifier = Modifier,
+  onTitleLongPress: (() -> Unit)?,
+) {
   val preferences = koinInject<AppearancePreferences>()
   val darkMode by preferences.darkMode.collectAsState()
   val darkTheme = isSystemInDarkTheme()
   val themeTransition = LocalThemeTransitionState.current
   val coroutineScope = rememberCoroutineScope()
+  
+  // Track title bounds for animation position
   val titleBounds = remember { mutableStateOf(Rect.Zero) }
   
+  // Helper function to toggle dark mode
   fun toggleDarkMode() {
     when (darkMode) {
-      DarkMode.System -> if (darkTheme) preferences.darkMode.set(DarkMode.Light) else preferences.darkMode.set(DarkMode.Dark)
-      DarkMode.Light -> if (darkTheme) preferences.darkMode.set(DarkMode.System) else preferences.darkMode.set(DarkMode.Dark)
-      DarkMode.Dark -> if (darkTheme) preferences.darkMode.set(DarkMode.Light) else preferences.darkMode.set(DarkMode.System)
+      DarkMode.System -> if (darkTheme) {
+        preferences.darkMode.set(DarkMode.Light)
+      } else {
+        preferences.darkMode.set(DarkMode.Dark)
+      }
+      DarkMode.Light -> if (darkTheme) {
+        preferences.darkMode.set(DarkMode.System)
+      } else {
+        preferences.darkMode.set(DarkMode.Dark)
+      }
+      DarkMode.Dark -> if (darkTheme) {
+        preferences.darkMode.set(DarkMode.Light)
+      } else {
+        preferences.darkMode.set(DarkMode.System)
+      }
     }
   }
 
   TopAppBar(
-    colors = TopAppBarDefaults.topAppBarColors(containerColor = if (MaterialTheme.colorScheme.background == Color.Black) Color.Black else MaterialTheme.colorScheme.surfaceContainer),
+    colors = TopAppBarDefaults.topAppBarColors(
+      containerColor = if (MaterialTheme.colorScheme.background == Color.Black) {
+        Color.Black
+      } else {
+        MaterialTheme.colorScheme.surfaceContainer
+      },
+    ),
     title = {
       val titleModifier = Modifier
-        .onGloballyPositioned { coordinates -> titleBounds.value = coordinates.boundsInWindow() }
+        .onGloballyPositioned { coordinates ->
+          titleBounds.value = coordinates.boundsInWindow()
+        }
         .pointerInput(onTitleLongPress) {
           detectTapGestures(
             onTap = { localOffset ->
+              // Don't allow theme change if animation is in progress
               if (themeTransition?.isAnimating == true) return@detectTapGestures
-              val windowOffset = Offset(titleBounds.value.left + localOffset.x, titleBounds.value.top + localOffset.y)
+              
+              // Calculate window position for circular reveal
+              val windowOffset = Offset(
+                titleBounds.value.left + localOffset.x,
+                titleBounds.value.top + localOffset.y
+              )
               themeTransition?.startTransition(windowOffset)
-              coroutineScope.launch { toggleDarkMode() }
+              // Delay theme change to allow overlay to display first
+              coroutineScope.launch {
+                toggleDarkMode()
+              }
             },
-            onLongPress = if (onTitleLongPress != null) { { onTitleLongPress() } } else null
+            onLongPress = if (onTitleLongPress != null) {
+              { onTitleLongPress() }
+            } else null
           )
         }
-      Text(title, style = if (onBackClick == null) MaterialTheme.typography.headlineMediumEmphasized else MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = titleModifier.then(if (onBackClick == null) Modifier.padding(start = 8.dp) else Modifier))
+
+      Text(
+        title,
+        style =
+          if (onBackClick == null) {
+            MaterialTheme.typography.headlineMediumEmphasized
+          } else {
+            MaterialTheme.typography.headlineSmall
+          },
+        fontWeight = FontWeight.ExtraBold,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier =
+          titleModifier.then(
+            if (onBackClick == null) {
+              Modifier.padding(start = 8.dp)
+            } else {
+              Modifier
+            },
+          ),
+      )
     },
     navigationIcon = {
       if (onBackClick != null) {
-        IconButton(onClick = onBackClick, modifier = Modifier.padding(horizontal = 2.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.secondary) }
+        IconButton(
+          onClick = onBackClick,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = stringResource(R.string.back),
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.secondary,
+          )
+        }
       }
     },
     actions = {
       additionalActions()
-      if (onSearchClick != null) IconButton(onClick = onSearchClick, modifier = Modifier.padding(horizontal = 2.dp)) { Icon(Icons.Filled.Search, contentDescription = "Search", modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.secondary) }
-      if (onSortClick != null) IconButton(onClick = onSortClick, modifier = Modifier.padding(horizontal = 2.dp)) { Icon(Icons.Default.ViewComfy, contentDescription = stringResource(R.string.sort), modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.secondary) }
-      if (onSettingsClick != null) IconButton(onClick = onSettingsClick, modifier = Modifier.padding(horizontal = 2.dp)) { Icon(Icons.Filled.Settings, contentDescription = "Settings", modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.secondary) }
+      if (onSearchClick != null) {
+        IconButton(
+          onClick = onSearchClick,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            Icons.Filled.Search,
+            contentDescription = "Search",
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.secondary,
+          )
+        }
+      }
+      if (onSortClick != null) {
+        IconButton(
+          onClick = onSortClick,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            Icons.Default.ViewComfy,
+            contentDescription = stringResource(R.string.sort),
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.secondary,
+          )
+        }
+      }
+      if (onSettingsClick != null) {
+        IconButton(
+          onClick = onSettingsClick,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            Icons.Filled.Settings,
+            contentDescription = "Settings",
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.secondary,
+          )
+        }
+      }
     },
     modifier = modifier,
   )
 }
 
+/**
+ * Selection mode top bar
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SelectionTopBar(
-  selectedCount: Int, totalCount: Int, onCancel: () -> Unit, onDelete: (() -> Unit)?, onRename: (() -> Unit)?, isSingleSelection: Boolean, onInfo: (() -> Unit)?, onShare: (() -> Unit)?, onPlay: (() -> Unit)?, onAddToPlaylist: (() -> Unit)?, onPinClick: (() -> Unit)?, isAllPinned: Boolean, isMixedPin: Boolean, showMoveControls: Boolean, isFirstPinned: Boolean, isLastPinned: Boolean, onMoveUpClick: (() -> Unit)?, onMoveDownClick: (() -> Unit)?, onBlacklist: (() -> Unit)?, onSelectAll: (() -> Unit)?, onInvertSelection: (() -> Unit)?, onDeselectAll: (() -> Unit)?, modifier: Modifier = Modifier, useRemoveIcon: Boolean = false,
+  selectedCount: Int,
+  totalCount: Int,
+  onCancel: () -> Unit,
+  onDelete: (() -> Unit)?,
+  onRename: (() -> Unit)?,
+  isSingleSelection: Boolean,
+  onInfo: (() -> Unit)?,
+  onShare: (() -> Unit)?,
+  onPlay: (() -> Unit)?,
+  onBlacklist: (() -> Unit)?,
+  onPinClick: (() -> Unit)?,
+  isPinned: Boolean = false,
+  onAddToPlaylistClick: (() -> Unit)? = null,
+  onSelectAll: (() -> Unit)?,
+  onInvertSelection: (() -> Unit)?,
+  onDeselectAll: (() -> Unit)?,
+  modifier: Modifier = Modifier,
+  useRemoveIcon: Boolean = false,
 ) {
   var showDropdown by remember { mutableStateOf(false) }
-  var showMoreMenu by remember { mutableStateOf(false) }
 
   TopAppBar(
-    colors = TopAppBarDefaults.topAppBarColors(containerColor = if (MaterialTheme.colorScheme.background == Color.Black) Color.Black else MaterialTheme.colorScheme.surfaceContainer),
+    colors = TopAppBarDefaults.topAppBarColors(
+      containerColor = if (MaterialTheme.colorScheme.background == Color.Black) {
+        Color.Black
+      } else {
+        MaterialTheme.colorScheme.surfaceContainer
+      },
+    ),
     title = {
-      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { showDropdown = true }) {
-        Text(stringResource(R.string.selected_items, selectedCount, totalCount), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Icon(Icons.Filled.ArrowDropDown, contentDescription = stringResource(R.string.selection_options), modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
-        DropdownMenu(expanded = showDropdown, onDismissRequest = { showDropdown = false }) {
-          if (onSelectAll != null) DropdownMenuItem(text = { Text(stringResource(R.string.select_all)) }, onClick = { onSelectAll(); showDropdown = false })
-          if (onInvertSelection != null) DropdownMenuItem(text = { Text(stringResource(R.string.invert_selection)) }, onClick = { onInvertSelection(); showDropdown = false })
-          if (onDeselectAll != null) DropdownMenuItem(text = { Text(stringResource(R.string.deselect_all)) }, onClick = { onDeselectAll(); showDropdown = false })
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.clickable { showDropdown = true },
+      ) {
+        Text(
+          stringResource(R.string.selected_items, selectedCount, totalCount),
+          style = MaterialTheme.typography.titleMedium,
+          color = MaterialTheme.colorScheme.primary,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        Icon(
+          Icons.Filled.ArrowDropDown,
+          contentDescription = stringResource(R.string.selection_options),
+          modifier = Modifier.size(24.dp),
+          tint = MaterialTheme.colorScheme.primary,
+        )
+
+        DropdownMenu(
+          expanded = showDropdown,
+          onDismissRequest = { showDropdown = false },
+        ) {
+          if (onSelectAll != null) {
+            DropdownMenuItem(
+              text = { Text(stringResource(R.string.select_all)) },
+              onClick = {
+                onSelectAll()
+                showDropdown = false
+              },
+            )
+          }
+          if (onInvertSelection != null) {
+            DropdownMenuItem(
+              text = { Text(stringResource(R.string.invert_selection)) },
+              onClick = {
+                onInvertSelection()
+                showDropdown = false
+              },
+            )
+          }
+          if (onDeselectAll != null) {
+            DropdownMenuItem(
+              text = { Text(stringResource(R.string.deselect_all)) },
+              onClick = {
+                onDeselectAll()
+                showDropdown = false
+              },
+            )
+          }
         }
       }
     },
     navigationIcon = {
-      IconButton(onClick = onCancel, modifier = Modifier.padding(horizontal = 2.dp)) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.generic_cancel), modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.secondary) }
+      IconButton(
+        onClick = onCancel,
+        modifier = Modifier.padding(horizontal = 2.dp),
+      ) {
+        Icon(
+          Icons.Filled.Close,
+          contentDescription = stringResource(R.string.generic_cancel),
+          modifier = Modifier.size(28.dp),
+          tint = MaterialTheme.colorScheme.secondary,
+        )
+      }
     },
     actions = {
-      if (onPlay != null) IconButton(onClick = onPlay, modifier = Modifier.padding(horizontal = 2.dp)) { Icon(Icons.Filled.PlayArrow, contentDescription = "Play", modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary) }
+      // Add to Playlist icon
+      if (onAddToPlaylistClick != null) {
+        IconButton(
+          onClick = onAddToPlaylistClick,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            Icons.Filled.PlaylistAdd,
+            contentDescription = stringResource(R.string.add_folder_to_playlist),
+            modifier = Modifier.size(28.dp),
+            tint = MaterialTheme.colorScheme.primary,
+          )
+        }
+      }
       
-      if (showMoveControls) {
-        IconButton(onClick = { onMoveUpClick?.invoke() }, enabled = !isFirstPinned, modifier = Modifier.padding(horizontal = 2.dp)) {
-          Icon(Icons.Filled.ArrowUpward, contentDescription = "Move Up", modifier = Modifier.size(24.dp), tint = if (isFirstPinned) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f) else MaterialTheme.colorScheme.secondary)
-        }
-        IconButton(onClick = { onMoveDownClick?.invoke() }, enabled = !isLastPinned, modifier = Modifier.padding(horizontal = 2.dp)) {
-          Icon(Icons.Filled.ArrowDownward, contentDescription = "Move Down", modifier = Modifier.size(24.dp), tint = if (isLastPinned) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f) else MaterialTheme.colorScheme.secondary)
-        }
-      }
-
+      // Pin/Unpin icon
       if (onPinClick != null) {
-        val pinTint = if (isMixedPin) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f) else MaterialTheme.colorScheme.secondary
-        IconButton(onClick = onPinClick, enabled = !isMixedPin, modifier = Modifier.padding(horizontal = 2.dp)) {
-          Box(contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.PushPin, contentDescription = "Pin/Unpin", modifier = Modifier.size(24.dp), tint = pinTint)
-            if (isAllPinned && !isMixedPin) {
-              val errorColor = MaterialTheme.colorScheme.error
-              Canvas(modifier = Modifier.size(24.dp)) {
-                drawLine(color = errorColor, start = Offset(size.width * 0.2f, size.height * 0.2f), end = Offset(size.width * 0.8f, size.height * 0.8f), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
-              }
-            }
-          }
+        IconButton(
+          onClick = onPinClick,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            Icons.Filled.PushPin,
+            contentDescription = if (isPinned) stringResource(R.string.unpin_folder) else stringResource(R.string.pin_folder),
+            modifier = Modifier.size(24.dp),
+            tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+          )
         }
       }
 
-      if (onAddToPlaylist != null) IconButton(onClick = onAddToPlaylist, modifier = Modifier.padding(horizontal = 2.dp)) { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, contentDescription = "Add to Playlist", modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.secondary) }
-      if (onDelete != null) IconButton(onClick = onDelete, modifier = Modifier.padding(horizontal = 2.dp)) { Icon(imageVector = if (useRemoveIcon) Icons.Filled.RemoveCircle else Icons.Filled.Delete, contentDescription = stringResource(R.string.delete), modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.error) }
+      // Play icon
+      if (onPlay != null) {
+        IconButton(
+          onClick = onPlay,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            Icons.Filled.PlayArrow,
+            contentDescription = "Play",
+            modifier = Modifier.size(28.dp),
+            tint = MaterialTheme.colorScheme.primary,
+          )
+        }
+      }
 
-      val hasMoreOptions = onRename != null || onInfo != null || onShare != null || onBlacklist != null
-      if (hasMoreOptions) {
-        Box {
-          IconButton(onClick = { showMoreMenu = true }, modifier = Modifier.padding(horizontal = 2.dp)) { Icon(Icons.Filled.MoreVert, contentDescription = "More Options", modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.secondary) }
-          DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
-            if (onRename != null) DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, leadingIcon = { Icon(Icons.Filled.DriveFileRenameOutline, contentDescription = null) }, onClick = { onRename(); showMoreMenu = false }, enabled = isSingleSelection)
-            if (onInfo != null) DropdownMenuItem(text = { Text(stringResource(R.string.info)) }, leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) }, onClick = { onInfo(); showMoreMenu = false }, enabled = isSingleSelection)
-            if (onShare != null) DropdownMenuItem(text = { Text(stringResource(R.string.generic_share)) }, leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) }, onClick = { onShare(); showMoreMenu = false })
-            if (onBlacklist != null) DropdownMenuItem(text = { Text(stringResource(R.string.pref_folders_blacklist)) }, leadingIcon = { Icon(Icons.Filled.Block, contentDescription = null) }, onClick = { onBlacklist(); showMoreMenu = false })
-          }
+      // Rename icon
+      if (onRename != null) {
+        IconButton(
+          onClick = onRename,
+          enabled = isSingleSelection,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            Icons.Filled.DriveFileRenameOutline,
+            contentDescription = stringResource(R.string.rename),
+            modifier = Modifier.size(24.dp),
+            tint =
+              if (isSingleSelection) {
+                MaterialTheme.colorScheme.secondary
+              } else {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+              },
+          )
+        }
+      }
+
+      // Info icon
+      if (onInfo != null) {
+        IconButton(
+          onClick = onInfo,
+          enabled = isSingleSelection,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            Icons.Filled.Info,
+            contentDescription = stringResource(R.string.info),
+            modifier = Modifier.size(24.dp),
+            tint =
+              if (isSingleSelection) {
+                MaterialTheme.colorScheme.secondary
+              } else {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+              },
+          )
+        }
+      }
+
+      // Share icon
+      if (onShare != null) {
+        IconButton(
+          onClick = onShare,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            Icons.Filled.Share,
+            contentDescription = stringResource(R.string.generic_share),
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.secondary,
+          )
+        }
+      }
+
+      // Blacklist icon
+      if (onBlacklist != null) {
+        IconButton(
+          onClick = onBlacklist,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            Icons.Filled.Block,
+            contentDescription = stringResource(R.string.pref_folders_blacklist),
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.secondary,
+          )
+        }
+      }
+
+      // Delete/Remove icon
+      if (onDelete != null) {
+        IconButton(
+          onClick = onDelete,
+          modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+          Icon(
+            imageVector = if (useRemoveIcon) Icons.Filled.RemoveCircle else Icons.Filled.Delete,
+            contentDescription = stringResource(R.string.delete),
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.error,
+          )
         }
       }
     },
