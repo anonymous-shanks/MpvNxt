@@ -94,6 +94,14 @@ class PlayerViewModel(
   private val playbackStateRepository: PlaybackStateRepository by inject()
   private val wyzieRepository: WyzieSearchRepository by inject()
 
+  // Companion object fixed for missing references
+  companion object {
+    const val TAG = "PlayerViewModel"
+    const val SEEK_COALESCE_DELAY_MS = 60L
+    val VALID_SUBTITLE_EXTENSIONS =
+      setOf("srt", "ass", "ssa", "sub", "idx", "vtt", "sup", "txt", "pgs")
+  }
+
   private val _playlistItems = MutableStateFlow<List<app.marlboroadvance.mpvex.ui.player.controls.components.sheets.PlaylistItem>>(emptyList())
   val playlistItems: StateFlow<List<app.marlboroadvance.mpvex.ui.player.controls.components.sheets.PlaylistItem>> = _playlistItems.asStateFlow()
 
@@ -151,6 +159,15 @@ class PlayerViewModel(
 
   val currentVolume = MutableStateFlow(host.audioManager.getStreamVolume(AudioManager.STREAM_MUSIC))
   private val volumeBoostCap by MPVLib.propInt["volume-max"].collectAsState(viewModelScope)
+
+  // Variables fixed for missing reference errors
+  private var mediaSearchJob: Job? = null
+  private var pendingSeekOffset: Int = 0
+  private var seekCoalesceJob: Job? = null
+  private val doubleTapToSeekDuration by lazy { gesturePreferences.doubleTapToSeekDuration.get() }
+  private val inputMethodManager by lazy {
+    host.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+  }
 
   init {
     viewModelScope.launch {
@@ -218,7 +235,7 @@ class PlayerViewModel(
   private val _videoZoom = MutableStateFlow(0f)
   val videoZoom: StateFlow<Float> = _videoZoom.asStateFlow()
   
-  // FIXED: ADDED PAN VARIABLES
+  // Variables correctly defined
   private val _videoPanX = MutableStateFlow(0f)
   val videoPanX: StateFlow<Float> = _videoPanX.asStateFlow()
   
@@ -367,7 +384,7 @@ class PlayerViewModel(
     pendingSeekOffset += offset
     seekCoalesceJob?.cancel()
     seekCoalesceJob = viewModelScope.launch(Dispatchers.IO) {
-      delay(60); val toApply = pendingSeekOffset; pendingSeekOffset = 0
+      delay(SEEK_COALESCE_DELAY_MS); val toApply = pendingSeekOffset; pendingSeekOffset = 0
       if (toApply != 0) {
         val d = MPVLib.getPropertyInt("duration") ?: 0
         val mode = if (playerPreferences.usePreciseSeeking.get() || d < 120) "relative+exact" else "relative+keyframes"
@@ -443,8 +460,6 @@ class PlayerViewModel(
   fun handleCenterSingleTap() { if (gesturePreferences.centerSingleActionGesture.get() == SingleActionGesture.PlayPause) pauseUnpause() }
 
   fun setVideoZoom(zoom: Float) { _videoZoom.value = zoom; MPVLib.setPropertyDouble("video-zoom", zoom.toDouble()) }
-  
-  // FIXED: PAN FUNCTIONS
   fun setVideoPan(x: Float, y: Float) { _videoPanX.value = x; _videoPanY.value = y; MPVLib.setPropertyDouble("video-pan-x", x.toDouble()); MPVLib.setPropertyDouble("video-pan-y", y.toDouble()) }
   fun resetVideoPan() { setVideoPan(0f, 0f) }
   fun resetVideoZoom() { setVideoZoom(0f) }
@@ -454,6 +469,23 @@ class PlayerViewModel(
   fun frameStepForward() { viewModelScope.launch(Dispatchers.IO) { MPVLib.command("no-osd", "frame-step"); delay(100); updateFrameInfo(); resetFrameNavigationTimer() } }
   fun frameStepBackward() { viewModelScope.launch(Dispatchers.IO) { MPVLib.command("no-osd", "frame-back-step"); delay(100); updateFrameInfo(); resetFrameNavigationTimer() } }
   fun resetFrameNavigationTimer() { timerJob?.cancel(); timerJob = viewModelScope.launch { delay(10000); _isFrameNavigationExpanded.value = false } }
+
+  // Timer functionality fixed
+  fun startTimer(seconds: Int) {
+    timerJob?.cancel()
+    _remainingTime.value = seconds
+    if (seconds < 1) return
+
+    timerJob =
+      viewModelScope.launch {
+        for (time in seconds downTo 0) {
+          _remainingTime.value = time
+          delay(1000)
+        }
+        MPVLib.setPropertyBoolean("pause", true)
+        showToast(host.context.getString(R.string.toast_sleep_timer_ended))
+      }
+  }
 
   fun takeSnapshot(context: Context) {
     viewModelScope.launch(Dispatchers.IO) {
