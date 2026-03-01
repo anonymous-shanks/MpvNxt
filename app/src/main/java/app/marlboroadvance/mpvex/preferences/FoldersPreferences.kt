@@ -11,6 +11,7 @@ class FoldersPreferences(
   // Set of folder paths that should be hidden from the folder list
   val blacklistedFolders = preferenceStore.getStringSet("blacklisted_folders", emptySet())
 
-  // Set of folder bucketIds/paths that are pinned to the top of the folder list
-  val pinnedFolders = preferenceStore.getStringSet("pinned_folders", emptySet())
+  // Ordered list of pinned folder paths, stored as a single string separated by |||
+  // This allows us to keep the custom user-defined order (Move Up / Move Down)
+  val pinnedFoldersList = preferenceStore.getString("pinned_folders_list", "")
 }
