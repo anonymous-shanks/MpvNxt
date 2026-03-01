@@ -93,8 +93,11 @@ fun BrowserTopBar(
   onDeselectAll: (() -> Unit)? = null,
   onPinClick: (() -> Unit)? = null,
   isPinned: Boolean = false,
+  isPinEnabled: Boolean = true,
   onMoveUpClick: (() -> Unit)? = null,
+  isMoveUpEnabled: Boolean = false,
   onMoveDownClick: (() -> Unit)? = null,
+  isMoveDownEnabled: Boolean = false,
   onAddToPlaylistClick: (() -> Unit)? = null,
   additionalActions: @Composable RowScope.() -> Unit = { },
   onTitleLongPress: (() -> Unit)? = null,
@@ -114,8 +117,11 @@ fun BrowserTopBar(
       onBlacklist = onBlacklistClick,
       onPinClick = onPinClick,
       isPinned = isPinned,
+      isPinEnabled = isPinEnabled,
       onMoveUpClick = onMoveUpClick,
+      isMoveUpEnabled = isMoveUpEnabled,
       onMoveDownClick = onMoveDownClick,
+      isMoveDownEnabled = isMoveDownEnabled,
       onAddToPlaylistClick = onAddToPlaylistClick,
       onSelectAll = onSelectAll,
       onInvertSelection = onInvertSelection,
@@ -308,8 +314,11 @@ private fun SelectionTopBar(
   onBlacklist: (() -> Unit)?,
   onPinClick: (() -> Unit)?,
   isPinned: Boolean = false,
+  isPinEnabled: Boolean = true,
   onMoveUpClick: (() -> Unit)? = null,
+  isMoveUpEnabled: Boolean = false,
   onMoveDownClick: (() -> Unit)? = null,
+  isMoveDownEnabled: Boolean = false,
   onAddToPlaylistClick: (() -> Unit)? = null,
   onSelectAll: (() -> Unit)?,
   onInvertSelection: (() -> Unit)?,
@@ -407,38 +416,49 @@ private fun SelectionTopBar(
       }
 
       if (onMoveUpClick != null) {
-        IconButton(onClick = onMoveUpClick) {
+        IconButton(
+          onClick = onMoveUpClick,
+          enabled = isMoveUpEnabled
+        ) {
           Icon(
             Icons.Filled.ArrowUpward,
             contentDescription = "Move Up",
             modifier = Modifier.size(24.dp),
-            tint = MaterialTheme.colorScheme.secondary,
+            tint = if (isMoveUpEnabled) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
           )
         }
       }
 
       if (onMoveDownClick != null) {
-        IconButton(onClick = onMoveDownClick) {
+        IconButton(
+          onClick = onMoveDownClick,
+          enabled = isMoveDownEnabled
+        ) {
           Icon(
             Icons.Filled.ArrowDownward,
             contentDescription = "Move Down",
             modifier = Modifier.size(24.dp),
-            tint = MaterialTheme.colorScheme.secondary,
+            tint = if (isMoveDownEnabled) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
           )
         }
       }
       
       if (onPinClick != null) {
-        IconButton(onClick = onPinClick) {
+        IconButton(
+          onClick = onPinClick,
+          enabled = isPinEnabled
+        ) {
           Box(contentAlignment = Alignment.Center) {
             Icon(
               Icons.Filled.PushPin,
               contentDescription = if (isPinned) "Unpin folder" else "Pin folder",
               modifier = Modifier.size(24.dp),
-              tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+              tint = if (!isPinEnabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                     else if (isPinned) MaterialTheme.colorScheme.primary
+                     else MaterialTheme.colorScheme.secondary,
             )
-            // Draw a slash if it's already pinned (indicates Unpin action)
-            if (isPinned) {
+            // Draw a slash if it's already pinned AND enabled (indicates Unpin action)
+            if (isPinned && isPinEnabled) {
               val slashColor = MaterialTheme.colorScheme.error
               Canvas(modifier = Modifier.size(24.dp)) {
                 drawLine(
