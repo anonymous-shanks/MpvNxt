@@ -342,8 +342,7 @@ class PlayerViewModel(
   fun unpause() { viewModelScope.launch(Dispatchers.IO) { withContext(Dispatchers.Main) { host.requestAudioFocus() }; MPVLib.setPropertyBoolean("pause", false) } }
   
   fun pauseUnpause() { 
-    val isCurrentlyPaused = paused ?: false
-    if (isCurrentlyPaused) {
+    if (paused == true) {
         unpause()
     } else {
         pause()
@@ -474,8 +473,7 @@ class PlayerViewModel(
   
   fun toggleFrameNavigationExpanded() { 
     if (!_isFrameNavigationExpanded.value) { 
-      val isCurrentlyPaused = paused ?: false
-      if (!isCurrentlyPaused) { 
+      if (paused != true) { 
         pauseUnpause() 
       }
       updateFrameInfo()
@@ -633,22 +631,19 @@ class PlayerViewModel(
   fun getPlaylistData(): List<app.marlboroadvance.mpvex.ui.player.controls.components.sheets.PlaylistItem>? {
     val a = host as? PlayerActivity ?: return null
     if (a.playlist.isEmpty()) return null
-    val cPos = pos ?: 0; val cDur = duration ?: 0
+    val cPos = pos ?: 0
+    val cDur = duration ?: 0
     
     return a.playlist.mapIndexed { index, uri ->
       val title = a.getPlaylistItemTitle(uri)
       val path = uri.toString()
       val isCurrentlyPlaying = index == a.playlistIndex
       
-      // Calculate progress locally per item for clarity
       val itemProgress = if (isCurrentlyPlaying && cDur > 0) ((cPos.toFloat() / cDur.toFloat()) * 100f).coerceIn(0f, 100f) else 0f
 
       val cacheKey = uri.toString()
       var (durationStr, resolutionStr, isNewCache) = synchronized(metadataCache) { metadataCache[cacheKey] } ?: Triple("", "", false)
 
-      // LIVE REMOVAL OF NEW LABEL:
-      // Agar ye track abhi play ho raha hai aur ye abhi tak "NEW" tha, 
-      // toh usko cache se hamesha ke liye turant hata do.
       if (isCurrentlyPlaying && isNewCache) {
           isNewCache = false
           synchronized(metadataCache) {
@@ -733,7 +728,6 @@ class PlayerViewModel(
           val key = item.uri.toString()
           if (metadataCache.get(key) == null) {
             val meta = getVideoMetadata(item.uri)
-            // Explicitly force currently playing items to NOT be new, bypassing DB lag
             val isN = if (item.isPlaying) false else checkIsNewVideo(item.uri)
             updateMetadataCache(key, Triple(meta.first, meta.second, isN))
             updates[key] = Triple(meta.first, meta.second, isN)
