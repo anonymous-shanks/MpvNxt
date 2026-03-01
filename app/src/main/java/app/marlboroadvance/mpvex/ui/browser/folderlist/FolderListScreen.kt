@@ -153,7 +153,6 @@ object FolderListScreen : Screen {
     val coroutineScope = rememberCoroutineScope()
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
-    // ViewModels and preferences
     val viewModel: FolderListViewModel = viewModel(
       factory = FolderListViewModel.factory(context.applicationContext as android.app.Application)
     )
@@ -162,7 +161,6 @@ object FolderListScreen : Screen {
     val foldersPreferences = koinInject<FoldersPreferences>()
     val advancedPreferences = koinInject<app.marlboroadvance.mpvex.preferences.AdvancedPreferences>()
 
-    // State collection
     val videoFolders by viewModel.videoFolders.collectAsState()
     val foldersWithNewCount by viewModel.foldersWithNewCount.collectAsState()
     val recentlyPlayedFilePath by viewModel.recentlyPlayedFilePath.collectAsState()
@@ -170,9 +168,14 @@ object FolderListScreen : Screen {
     val scanStatus by viewModel.scanStatus.collectAsState()
     val hasCompletedInitialLoad by viewModel.hasCompletedInitialLoad.collectAsState()
     val foldersWereDeleted by viewModel.foldersWereDeleted.collectAsState()
-    val pinnedFolderPaths by foldersPreferences.pinnedFolders.collectAsState()
+    
+    // Read pinned list as string and convert to ordered list
+    val pinnedFoldersStr by foldersPreferences.pinnedFoldersList.collectAsState()
+    val pinnedFolderPaths = remember(pinnedFoldersStr) {
+      if (pinnedFoldersStr.isEmpty()) emptyList<String>() else pinnedFoldersStr.split("|||")
+    }
+    val pinnedFolderSet = pinnedFolderPaths.toSet()
 
-    // Preferences
     val mediaLayoutMode by browserPreferences.mediaLayoutMode.collectAsState()
     val folderGridColumnsPortrait by browserPreferences.folderGridColumnsPortrait.collectAsState()
     val folderGridColumnsLandscape by browserPreferences.folderGridColumnsLandscape.collectAsState()
@@ -186,7 +189,6 @@ object FolderListScreen : Screen {
     val enableRecentlyPlayed by advancedPreferences.enableRecentlyPlayed.collectAsState()
     val quickPlayFab by browserPreferences.quickPlayFab.collectAsState()
 
-    // UI state - use standalone states to avoid scroll issues with predictive back gesture
     val listState = rememberLazyListState()
     val gridState = rememberLazyGridState()
     val navigationBarHeight = LocalNavigationBarHeight.current
@@ -195,11 +197,9 @@ object FolderListScreen : Screen {
     val deleteDialogOpen = rememberSaveable { mutableStateOf(false) }
     val showLinkDialog = remember { mutableStateOf(false) }
     
-    // Add to playlist state
     val showAddToPlaylistDialog = rememberSaveable { mutableStateOf(false) }
     var videosToAdd by remember { mutableStateOf<List<Video>>(emptyList()) }
 
-    // Search state
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var isSearching by rememberSaveable { mutableStateOf(false) }
     var searchResults by remember { mutableStateOf<List<FileSystemItem>>(emptyList()) }
@@ -207,7 +207,6 @@ object FolderListScreen : Screen {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
 
-    // Search logic
     LaunchedEffect(searchQuery, isSearching) {
       if (isSearching && searchQuery.isNotBlank()) {
         isSearchLoading = true
@@ -226,11 +225,9 @@ object FolderListScreen : Screen {
       }
     }
 
-    // FAB state
     val isFabVisible = remember { mutableStateOf(true) }
     val isFabExpanded = remember { mutableStateOf(false) }
 
-    // File picker
     val filePicker = rememberLauncherForActivityResult(
       contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -245,16 +242,17 @@ object FolderListScreen : Screen {
       }
     }
 
-    // Sorting and filtering (now prioritizes pinned folders)
+    // Sorting logic that preserves the custom order of pinned folders
     val sortedFolders = remember(videoFolders, folderSortType, folderSortOrder, pinnedFolderPaths) {
       val baseSorted = SortUtils.sortFolders(videoFolders, folderSortType, folderSortOrder)
-      val (pinned, unpinned) = baseSorted.partition { pinnedFolderPaths.contains(it.path) }
+      val pinned = baseSorted.filter { pinnedFolderSet.contains(it.path) }
+        .sortedBy { pinnedFolderPaths.indexOf(it.path) }
+      val unpinned = baseSorted.filterNot { pinnedFolderSet.contains(it.path) }
       pinned + unpinned
     }
 
     val filteredFolders = sortedFolders
     
-    // Selection manager
     val selectionManager = rememberSelectionManager(
       items = sortedFolders,
       getId = { it.bucketId },
@@ -267,23 +265,19 @@ object FolderListScreen : Screen {
       onOperationComplete = { viewModel.refresh() },
     )
 
-    // Check if selected folders are all pinned
     val selectedItems = selectionManager.getSelectedItems()
-    val allPinned = selectedItems.isNotEmpty() && selectedItems.all { pinnedFolderPaths.contains(it.path) }
+    val allPinned = selectedItems.isNotEmpty() && selectedItems.all { pinnedFolderSet.contains(it.path) }
 
-    // Permissions
     val permissionState = PermissionUtils.handleStoragePermission(
       onPermissionGranted = { viewModel.refresh() },
     )
 
-    // Update MainScreen about permission state
     LaunchedEffect(permissionState.status) {
       app.marlboroadvance.mpvex.ui.browser.MainScreen.updatePermissionState(
         isDenied = permissionState.status is PermissionStatus.Denied
       )
     }
 
-    // Lifecycle observer for refresh
     DisposableEffect(lifecycleOwner) {
       val observer = LifecycleEventObserver { _, event ->
         if (event == Lifecycle.Event.ON_RESUME) {
@@ -294,7 +288,6 @@ object FolderListScreen : Screen {
       onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Optimized back handler for immediate response
     val shouldHandleBack = selectionManager.isInSelectionMode || isSearching || isFabExpanded.value
     androidx.activity.compose.BackHandler(enabled = shouldHandleBack) {
       when {
@@ -307,7 +300,6 @@ object FolderListScreen : Screen {
       }
     }
 
-    // FAB scroll tracking
     app.marlboroadvance.mpvex.ui.browser.fab.FabScrollHelper.trackScrollForFabVisibility(
       listState = listState,
       gridState = if (mediaLayoutMode == MediaLayoutMode.GRID) gridState else null,
@@ -358,7 +350,6 @@ object FolderListScreen : Screen {
             shape = RoundedCornerShape(28.dp),
             tonalElevation = 6.dp,
           ) {
-            // Empty content for SearchBar
           }
         } else {
           BrowserTopBar(
@@ -410,17 +401,51 @@ object FolderListScreen : Screen {
             },
             onPinClick = {
               coroutineScope.launch {
-                val currentPinned = foldersPreferences.pinnedFolders.get().toMutableSet()
+                val currentList = pinnedFolderPaths.toMutableList()
                 if (allPinned) {
-                  selectedItems.forEach { currentPinned.remove(it.path) }
+                  selectedItems.forEach { currentList.remove(it.path) }
                 } else {
-                  selectedItems.forEach { currentPinned.add(it.path) }
+                  selectedItems.forEach {
+                    if (!currentList.contains(it.path)) currentList.add(it.path)
+                  }
                 }
-                foldersPreferences.pinnedFolders.set(currentPinned)
+                foldersPreferences.pinnedFoldersList.set(currentList.joinToString("|||"))
                 selectionManager.clear()
               }
             },
             isPinned = allPinned,
+            onMoveUpClick = if (selectionManager.selectedCount == 1 && allPinned) {
+              {
+                coroutineScope.launch {
+                  val path = selectedItems.first().path
+                  val currentList = pinnedFolderPaths.toMutableList()
+                  val index = currentList.indexOf(path)
+                  if (index > 0) {
+                    val temp = currentList[index - 1]
+                    currentList[index - 1] = currentList[index]
+                    currentList[index] = temp
+                    foldersPreferences.pinnedFoldersList.set(currentList.joinToString("|||"))
+                    // Note: selectionManager.clear() is intentionally NOT called here
+                  }
+                }
+              }
+            } else null,
+            onMoveDownClick = if (selectionManager.selectedCount == 1 && allPinned) {
+              {
+                coroutineScope.launch {
+                  val path = selectedItems.first().path
+                  val currentList = pinnedFolderPaths.toMutableList()
+                  val index = currentList.indexOf(path)
+                  if (index >= 0 && index < currentList.size - 1) {
+                    val temp = currentList[index + 1]
+                    currentList[index + 1] = currentList[index]
+                    currentList[index] = temp
+                    foldersPreferences.pinnedFoldersList.set(currentList.joinToString("|||"))
+                    // Note: selectionManager.clear() is intentionally NOT called here
+                  }
+                }
+              }
+            } else null,
             onAddToPlaylistClick = {
               coroutineScope.launch {
                 val selectedIds = selectionManager.getSelectedItems().map { it.bucketId }.toSet()
@@ -627,7 +652,7 @@ object FolderListScreen : Screen {
             } else {
               FolderListContent(
                 folders = filteredFolders,
-                pinnedFolderPaths = pinnedFolderPaths,
+                pinnedFolderPaths = pinnedFolderSet,
                 foldersWithNewCount = foldersWithNewCount,
                 recentlyPlayedFilePath = recentlyPlayedFilePath,
                 isLoading = isLoading,
