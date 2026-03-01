@@ -253,8 +253,10 @@ object FolderListScreen : Screen {
 
     val filteredFolders = sortedFolders
     
+    // THE FIX: We use videoFolders as the items source for SelectionManager
+    // so that when sortedFolders reorders, the selection manager doesn't clear itself.
     val selectionManager = rememberSelectionManager(
-      items = sortedFolders,
+      items = videoFolders,
       getId = { it.bucketId },
       onDeleteItems = { folders, _ ->
         val ids = folders.map { it.bucketId }.toSet()
@@ -438,7 +440,7 @@ object FolderListScreen : Screen {
                   currentList[index - 1] = currentList[index]
                   currentList[index] = temp
                   foldersPreferences.pinnedFoldersList.set(currentList.joinToString("|||"))
-                  // Selection intentionally NOT cleared to allow continuous movement
+                  // Selection Manager won't clear because it's tied to videoFolders now
                 }
               }
             },
@@ -453,7 +455,7 @@ object FolderListScreen : Screen {
                   currentList[index + 1] = currentList[index]
                   currentList[index] = temp
                   foldersPreferences.pinnedFoldersList.set(currentList.joinToString("|||"))
-                  // Selection intentionally NOT cleared to allow continuous movement
+                  // Selection Manager won't clear because it's tied to videoFolders now
                 }
               }
             },
