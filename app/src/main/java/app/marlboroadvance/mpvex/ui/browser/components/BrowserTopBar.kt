@@ -404,17 +404,19 @@ private fun SelectionTopBar(
       }
     },
     actions = {
-      if (onAddToPlaylistClick != null) {
-        IconButton(onClick = onAddToPlaylistClick) {
+      // 1. Play Button (Moved to the extreme left of actions)
+      if (onPlay != null) {
+        IconButton(onClick = onPlay) {
           Icon(
-            Icons.Filled.PlaylistAdd,
-            contentDescription = "Add folder to playlist",
+            Icons.Filled.PlayArrow,
+            contentDescription = "Play",
             modifier = Modifier.size(26.dp),
             tint = MaterialTheme.colorScheme.primary,
           )
         }
       }
 
+      // 2. Move Up
       if (onMoveUpClick != null) {
         IconButton(
           onClick = onMoveUpClick,
@@ -429,6 +431,7 @@ private fun SelectionTopBar(
         }
       }
 
+      // 3. Move Down
       if (onMoveDownClick != null) {
         IconButton(
           onClick = onMoveDownClick,
@@ -443,6 +446,7 @@ private fun SelectionTopBar(
         }
       }
       
+      // 4. Pin / Unpin
       if (onPinClick != null) {
         IconButton(
           onClick = onPinClick,
@@ -457,7 +461,6 @@ private fun SelectionTopBar(
                      else if (isPinned) MaterialTheme.colorScheme.primary
                      else MaterialTheme.colorScheme.secondary,
             )
-            // Draw a slash if it's already pinned AND enabled (indicates Unpin action)
             if (isPinned && isPinEnabled) {
               val slashColor = MaterialTheme.colorScheme.error
               Canvas(modifier = Modifier.size(24.dp)) {
@@ -473,17 +476,7 @@ private fun SelectionTopBar(
         }
       }
 
-      if (onPlay != null) {
-        IconButton(onClick = onPlay) {
-          Icon(
-            Icons.Filled.PlayArrow,
-            contentDescription = "Play",
-            modifier = Modifier.size(26.dp),
-            tint = MaterialTheme.colorScheme.primary,
-          )
-        }
-      }
-
+      // 5. Rename
       if (onRename != null) {
         IconButton(
           onClick = onRename,
@@ -498,19 +491,8 @@ private fun SelectionTopBar(
         }
       }
 
-      if (onDelete != null) {
-        IconButton(onClick = onDelete) {
-          Icon(
-            imageVector = if (useRemoveIcon) Icons.Filled.RemoveCircle else Icons.Filled.Delete,
-            contentDescription = stringResource(R.string.delete),
-            modifier = Modifier.size(24.dp),
-            tint = MaterialTheme.colorScheme.error,
-          )
-        }
-      }
-
-      // 3-dot overflow menu for Share, Info, Blacklist
-      if (onShare != null || onBlacklist != null || onInfo != null) {
+      // 6. Overflow Menu (3-dot) for remaining actions
+      if (onShare != null || onBlacklist != null || onInfo != null || onDelete != null || onAddToPlaylistClick != null) {
         IconButton(onClick = { showOverflow = true }) {
           Icon(
             Icons.Filled.MoreVert,
@@ -523,6 +505,19 @@ private fun SelectionTopBar(
             expanded = showOverflow,
             onDismissRequest = { showOverflow = false }
           ) {
+            // Add to Playlist
+            if (onAddToPlaylistClick != null) {
+              DropdownMenuItem(
+                text = { Text("Add to playlist") },
+                onClick = {
+                  showOverflow = false
+                  onAddToPlaylistClick()
+                },
+                leadingIcon = { Icon(Icons.Filled.PlaylistAdd, null) }
+              )
+            }
+
+            // Info
             if (onInfo != null && isSingleSelection) {
               DropdownMenuItem(
                 text = { Text(stringResource(R.string.info)) },
@@ -533,6 +528,8 @@ private fun SelectionTopBar(
                 leadingIcon = { Icon(Icons.Filled.Info, null) }
               )
             }
+
+            // Share
             if (onShare != null) {
               DropdownMenuItem(
                 text = { Text(stringResource(R.string.generic_share)) },
@@ -543,6 +540,8 @@ private fun SelectionTopBar(
                 leadingIcon = { Icon(Icons.Filled.Share, null) }
               )
             }
+
+            // Blacklist
             if (onBlacklist != null) {
               DropdownMenuItem(
                 text = { Text(stringResource(R.string.pref_folders_blacklist)) },
@@ -551,6 +550,24 @@ private fun SelectionTopBar(
                   onBlacklist()
                 },
                 leadingIcon = { Icon(Icons.Filled.Block, null) }
+              )
+            }
+
+            // Delete (with red error color)
+            if (onDelete != null) {
+              DropdownMenuItem(
+                text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
+                onClick = {
+                  showOverflow = false
+                  onDelete()
+                },
+                leadingIcon = { 
+                  Icon(
+                    imageVector = if (useRemoveIcon) Icons.Filled.RemoveCircle else Icons.Filled.Delete, 
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                  ) 
+                }
               )
             }
           }
