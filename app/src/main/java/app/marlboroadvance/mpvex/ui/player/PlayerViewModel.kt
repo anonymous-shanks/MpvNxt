@@ -340,7 +340,17 @@ class PlayerViewModel(
   // ==================== Playback & UI Logic ====================
   fun pause() { viewModelScope.launch(Dispatchers.IO) { MPVLib.setPropertyBoolean("pause", true); withContext(Dispatchers.Main) { host.abandonAudioFocus() } } }
   fun unpause() { viewModelScope.launch(Dispatchers.IO) { withContext(Dispatchers.Main) { host.requestAudioFocus() }; MPVLib.setPropertyBoolean("pause", false) } }
-  fun pauseUnpause() { if (paused == true) unpause() else pause() }
+  
+  // FIXED: Explicit boolean check to resolve inferred type mismatch
+  fun pauseUnpause() {
+    val isCurrentlyPaused = paused ?: false
+    if (isCurrentlyPaused) {
+        unpause()
+    } else {
+        pause()
+    }
+  }
+  
   fun applyPersistedShuffleState() { if (_shuffleEnabled.value) (host as? PlayerActivity)?.onShuffleToggled(true) }
 
   fun showControls() {
@@ -462,15 +472,21 @@ class PlayerViewModel(
   fun resetVideoZoom() { setVideoZoom(0f) }
 
   fun updateFrameInfo() { _currentFrame.value = MPVLib.getPropertyInt("estimated-frame-number") ?: 0; val dur = MPVLib.getPropertyDouble("duration") ?: 0.0; val fps = MPVLib.getPropertyDouble("container-fps") ?: 0.0; _totalFrames.value = if (dur > 0 && fps > 0) (dur * fps).toInt() else 0 }
+  
+  // FIXED: Explicit boolean check to resolve inferred type mismatch
   fun toggleFrameNavigationExpanded() { 
     if (!_isFrameNavigationExpanded.value) { 
-      if (paused != true) { pauseUnpause() }
+      val isCurrentlyPaused = paused ?: false
+      if (!isCurrentlyPaused) { 
+        pauseUnpause() 
+      }
       updateFrameInfo()
       playerUpdate.value = PlayerUpdates.FrameInfo(_currentFrame.value, _totalFrames.value)
       resetFrameNavigationTimer() 
     }
     _isFrameNavigationExpanded.update { !it } 
   }
+  
   fun frameStepForward() { viewModelScope.launch(Dispatchers.IO) { MPVLib.command("no-osd", "frame-step"); delay(100); updateFrameInfo(); resetFrameNavigationTimer() } }
   fun frameStepBackward() { viewModelScope.launch(Dispatchers.IO) { MPVLib.command("no-osd", "frame-back-step"); delay(100); updateFrameInfo(); resetFrameNavigationTimer() } }
   fun resetFrameNavigationTimer() { timerJob?.cancel(); timerJob = viewModelScope.launch { delay(10000); _isFrameNavigationExpanded.value = false } }
