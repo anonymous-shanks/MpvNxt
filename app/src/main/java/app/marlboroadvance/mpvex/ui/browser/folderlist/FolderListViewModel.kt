@@ -67,29 +67,33 @@ class FolderListViewModel(
   fun refresh() {
     refreshJob?.cancel()
     refreshJob = viewModelScope.launch(Dispatchers.IO) {
-      _isLoading.value = true
+      if (_videoFolders.value.isEmpty()) {
+        _isLoading.value = true
+      }
       _scanStatus.value = "Scanning folders..."
       _foldersWereDeleted.value = false
 
       try {
         val context = getApplication<Application>().applicationContext
         
-        // 1. Fetch folders
+        // 1. Fetch folders (fast operation)
         val folders = MediaFileRepository.getAllVideoFoldersFast(context)
         _videoFolders.value = folders
         _hasCompletedInitialLoad.value = true
+
+        // ** CRITICAL FIX: Unblock the UI immediately so it doesn't scan every time on startup **
+        _isLoading.value = false
+        _scanStatus.value = null
 
         // 2. Fetch recently played
         val recent = RecentlyPlayedOps.getRecentlyPlayed(1).firstOrNull()
         _recentlyPlayedFilePath.value = recent?.filePath
 
-        // 3. Calculate "NEW" counts in background
-        _scanStatus.value = "Calculating new videos..."
+        // 3. Calculate "NEW" counts entirely in the background
         calculateNewVideoCounts(folders)
 
       } catch (e: Exception) {
         Log.e("FolderListViewModel", "Error fetching folders", e)
-      } finally {
         _isLoading.value = false
         _scanStatus.value = null
       }
@@ -138,18 +142,14 @@ class FolderListViewModel(
     _foldersWithNewCount.value = resultList
   }
 
-  // ==================== Multi-Check History Fix ====================
   private suspend fun checkIsNewVideo(video: Video, thresholdMillis: Long, currentTime: Long): Boolean {
-    // 1. Date check
     val dateAddedMillis = maxOf(video.dateAdded, video.dateModified) * 1000L
     if (dateAddedMillis == 0L || (currentTime - dateAddedMillis) > thresholdMillis) {
       return false
     }
 
-    // 2. MULTI-CHECK LOGIC for Database
     val possibleIdentifiers = mutableSetOf<String>()
 
-    // - Intent emulation (Primary check that Player uses)
     val dummyIntent = Intent()
     dummyIntent.data = video.uri
     val parsedUri = dummyIntent.data ?: Uri.parse(dummyIntent.getStringExtra(Intent.EXTRA_TEXT) ?: "")
@@ -159,31 +159,24 @@ class FolderListViewModel(
         else -> parsedUri.toString()
     }
     possibleIdentifiers.add(intentIdentifier)
-
-    // - Raw URI check
     possibleIdentifiers.add(video.uri.toString())
 
-    // - Direct file path check
     if (video.path.isNotBlank()) {
         possibleIdentifiers.add(video.path)
     }
 
-    // - Display name check
     if (video.displayName.isNotBlank()) {
         possibleIdentifiers.add(video.displayName)
     }
 
-    // Checking database against all possible identities
     for (identifier in possibleIdentifiers) {
         if (identifier.isBlank()) continue
         val history = playbackStateRepository.getVideoDataByTitle(identifier)
         if (history != null && history.lastPosition > 0) {
-            // If any record exists showing watch progress, it is NOT new
             return false
         }
     }
     
-    // No history found anywhere, it IS new
     return true
   }
 
@@ -193,10 +186,8 @@ class FolderListViewModel(
         val context = getApplication<Application>().applicationContext
         for (video in videos) {
           try {
-            // Try content resolver delete first
             val deletedRows = context.contentResolver.delete(video.uri, null, null)
             if (deletedRows == 0 && video.path.isNotBlank()) {
-              // Fallback to raw file delete
               val file = File(video.path)
               if (file.exists()) {
                 file.delete()
