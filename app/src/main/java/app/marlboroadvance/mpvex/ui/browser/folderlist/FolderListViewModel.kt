@@ -16,14 +16,16 @@ import app.marlboroadvance.mpvex.repository.MediaFileRepository
 import app.marlboroadvance.mpvex.utils.history.RecentlyPlayedOps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 data class FolderWithNewCount(
   val folder: VideoFolder,
@@ -59,6 +61,10 @@ class FolderListViewModel(
   val foldersWereDeleted: StateFlow<Boolean> = _foldersWereDeleted.asStateFlow()
 
   private var refreshJob: Job? = null
+  
+  // SUPER CACHE: Jo videos ek baar confirm ho gayi ki wo "NEW" nahi hain, 
+  // unko database me wapas dhundhne ki zaroorat nahi padegi. Memory se instant check hoga.
+  private val knownNotNewVideoUris = ConcurrentHashMap<String, Boolean>()
 
   init {
     refresh()
@@ -69,7 +75,6 @@ class FolderListViewModel(
     refreshJob = viewModelScope.launch(Dispatchers.IO) {
       if (_videoFolders.value.isEmpty()) {
         _isLoading.value = true
-        _scanStatus.value = "Scanning folders..."
       }
       _foldersWereDeleted.value = false
 
@@ -81,21 +86,19 @@ class FolderListViewModel(
         _videoFolders.value = folders
         _hasCompletedInitialLoad.value = true
 
-        // ** CRITICAL FIX: Turant UI ko unblock karo, taaki app baar-baar scan karta hua na dikhe **
+        // ** CRITICAL FIX: UI Loading screen ko turant band kar do! **
         _isLoading.value = false
-        _scanStatus.value = null
 
         // 2. Fetch recently played
         val recent = RecentlyPlayedOps.getRecentlyPlayed(1).firstOrNull()
         _recentlyPlayedFilePath.value = recent?.filePath
 
-        // 3. Calculate "NEW" counts completely in background
+        // 3. Calculate "NEW" counts in the background (Now parallel and cached)
         calculateNewVideoCounts(folders)
 
       } catch (e: Exception) {
         Log.e("FolderListViewModel", "Error fetching folders", e)
         _isLoading.value = false
-        _scanStatus.value = null
       }
     }
   }
@@ -122,32 +125,44 @@ class FolderListViewModel(
     val currentTime = System.currentTimeMillis()
     val context = getApplication<Application>().applicationContext
 
-    val resultList = mutableListOf<FolderWithNewCount>()
-
-    for (folder in folders) {
-      var newCount = 0
-      try {
-        val videos = MediaFileRepository.getVideosInFolder(context, folder.bucketId)
-        for (video in videos) {
-          if (checkIsNewVideo(video, thresholdMillis, currentTime)) {
-            newCount++
-          }
+    // BLAZING FAST PARALLEL PROCESSING: Har folder ek sath check hoga!
+    val deferredCounts = folders.map { folder ->
+        viewModelScope.async(Dispatchers.IO) {
+            var newCount = 0
+            try {
+                val videos = MediaFileRepository.getVideosInFolder(context, folder.bucketId)
+                for (video in videos) {
+                    if (checkIsNewVideo(video, thresholdMillis, currentTime)) {
+                        newCount++
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("FolderListViewModel", "Error getting videos for folder ${folder.name}", e)
+            }
+            FolderWithNewCount(folder, newCount)
         }
-      } catch (e: Exception) {
-        Log.e("FolderListViewModel", "Error getting videos for folder ${folder.name}", e)
-      }
-      resultList.add(FolderWithNewCount(folder, newCount))
     }
 
-    _foldersWithNewCount.value = resultList
+    // Wait for all background checks to complete and update UI seamlessly
+    _foldersWithNewCount.value = deferredCounts.awaitAll()
   }
 
   private suspend fun checkIsNewVideo(video: Video, thresholdMillis: Long, currentTime: Long): Boolean {
-    val dateAddedMillis = maxOf(video.dateAdded, video.dateModified) * 1000L
-    if (dateAddedMillis == 0L || (currentTime - dateAddedMillis) > thresholdMillis) {
-      return false
+    val uriString = video.uri.toString()
+    
+    // CACHE HIT (O(1) Speed): Agar pata hai ki purani/dekhi hui hai, instantly return false.
+    if (knownNotNewVideoUris[uriString] == true) {
+        return false
     }
 
+    // 1. Date Check
+    val dateAddedMillis = maxOf(video.dateAdded, video.dateModified) * 1000L
+    if (dateAddedMillis == 0L || (currentTime - dateAddedMillis) > thresholdMillis) {
+        knownNotNewVideoUris[uriString] = true // Purani video hai, isko cache me daal do
+        return false
+    }
+
+    // 2. Database Multi-Check
     val possibleIdentifiers = mutableSetOf<String>()
 
     val dummyIntent = Intent()
@@ -159,7 +174,7 @@ class FolderListViewModel(
         else -> parsedUri.toString()
     }
     possibleIdentifiers.add(intentIdentifier)
-    possibleIdentifiers.add(video.uri.toString())
+    possibleIdentifiers.add(uriString)
 
     if (video.path.isNotBlank()) {
         possibleIdentifiers.add(video.path)
@@ -169,10 +184,12 @@ class FolderListViewModel(
         possibleIdentifiers.add(video.displayName)
     }
 
+    // Heavy Database Querying
     for (identifier in possibleIdentifiers) {
         if (identifier.isBlank()) continue
         val history = playbackStateRepository.getVideoDataByTitle(identifier)
         if (history != null && history.lastPosition > 0) {
+            knownNotNewVideoUris[uriString] = true // Dekh li hai, isko bhi hamesha ke liye cache me daal do!
             return false
         }
     }
@@ -193,6 +210,8 @@ class FolderListViewModel(
                 file.delete()
               }
             }
+            // Clear from cache on delete just in case
+            knownNotNewVideoUris.remove(video.uri.toString())
           } catch (e: Exception) {
             Log.e("FolderListViewModel", "Error deleting video", e)
           }
