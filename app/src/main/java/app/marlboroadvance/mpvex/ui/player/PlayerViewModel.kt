@@ -1501,7 +1501,8 @@ class PlayerViewModel(
 
       val cacheKey = uri.toString()
       var (durationStr, resolutionStr, isNewCache) = synchronized(metadataCache) { metadataCache[cacheKey] } ?: Triple("", "", false)
-
+      
+      // Real-time "NEW" label removal logic
       if (isCurrentlyPlaying && isNewCache) {
           isNewCache = false
           synchronized(metadataCache) {
@@ -1524,6 +1525,7 @@ class PlayerViewModel(
     }
   }
 
+  // MULTI-CHECK HISTORY FIX
   private fun getMediaIdentifierForUri(uri: Uri): String {
     val dummyIntent = Intent()
     if (uri.scheme == "file" || uri.scheme == "content") {
@@ -1586,25 +1588,37 @@ class PlayerViewModel(
       return false
     }
 
+    // MULTI-CHECK LOGIC
     val possibleIdentifiers = mutableSetOf<String>()
+    
+    // 1. Intent emulation (Primary check)
     possibleIdentifiers.add(getMediaIdentifierForUri(uri))
+    
+    // 2. Raw URI
     possibleIdentifiers.add(uri.toString())
+    
+    // 3. Direct file path
     if (uri.scheme == "file" && uri.path != null) {
         possibleIdentifiers.add(uri.path!!)
     }
+    
+    // 4. Display name
     val fileName = getFileNameFromUri(uri)
     if (fileName != null) {
         possibleIdentifiers.add(fileName)
     }
 
+    // Check database against all possible identities
     for (identifier in possibleIdentifiers) {
         if (identifier.isBlank()) continue
         val history = playbackStateRepository.getVideoDataByTitle(identifier)
         if (history != null && history.lastPosition > 0) {
+            // If any record exists showing watch progress, it is NOT new
             return false
         }
     }
     
+    // No history found anywhere, it IS new
     return true
   }
 
