@@ -548,8 +548,8 @@ fun PlayerControls(
             exit = fadeOut(),
             modifier = Modifier.constrainAs(customLeftButtonsRef) {
                 start.linkTo(parent.start, spacing.medium)
-                // Hamesha seekbar ke upar anchor rahega, player controls ko touch nahi karega
-                bottom.linkTo(seekbar.top, 16.dp)
+                // NEW: Landscape me Custom Buttons ab bottomLeftControls ke upar stakced hain 12dp gap par
+                bottom.linkTo(bottomLeftControls.top, 12.dp)
                 width = Dimension.preferredWrapContent
                 height = Dimension.wrapContent
             }
@@ -604,8 +604,8 @@ fun PlayerControls(
             exit = fadeOut(),
             modifier = Modifier.constrainAs(customRightButtonsRef) {
                 end.linkTo(parent.end, spacing.medium)
-                // Hamesha seekbar ke upar anchor rahega
-                bottom.linkTo(seekbar.top, 16.dp)
+                // NEW: Landscape me Custom Buttons ab bottomRightControls ke upar stakced hain 12dp gap par
+                bottom.linkTo(bottomRightControls.top, 12.dp)
                 width = Dimension.preferredWrapContent
                 height = Dimension.wrapContent
             }
@@ -661,8 +661,8 @@ fun PlayerControls(
             modifier = Modifier.constrainAs(createRef()) {
                 start.linkTo(parent.start)
                 end.linkTo(parent.end)
-                // Top se bottom tak 16.dp ka uniform stack banaya hai
-                bottom.linkTo(seekbar.top, 16.dp)
+                // Portrait stack: 12dp gap above seekbar
+                bottom.linkTo(seekbar.top, 12.dp)
                 width = Dimension.preferredWrapContent
                 height = Dimension.wrapContent
             }
@@ -745,8 +745,8 @@ fun PlayerControls(
               end.linkTo(parent.absoluteRight)
               start.linkTo(parent.absoluteLeft)
               if (isPortrait) {
-                // Stack me play/pause ke liye bhi same 16.dp margin
-                bottom.linkTo(bottomRightControls.top, 16.dp)
+                // Portrait stack: 12dp gap above bottom controls
+                bottom.linkTo(bottomRightControls.top, 12.dp)
               } else {
                 top.linkTo(parent.top)
                 bottom.linkTo(parent.bottom)
@@ -1009,11 +1009,11 @@ fun PlayerControls(
               )
               .constrainAs(seekbar) {
                 if (isPortrait) {
-                  // Stack me Seekbar ke liye bhi same 16.dp margin
-                  bottom.linkTo(playerPauseButton.top, 16.dp)
+                  // Portrait stack: 12dp gap above play button
+                  bottom.linkTo(playerPauseButton.top, 12.dp)
                 } else {
-                  // Pehle 32dp se thoda neeche 20dp par set kiya
-                  bottom.linkTo(parent.bottom, 20.dp)
+                  // NEW: Landscape seekbar 24dp from parent bottom
+                  bottom.linkTo(parent.bottom, 24.dp)
                 }
                 start.linkTo(parent.start, spacing.medium)
                 end.linkTo(parent.end, spacing.medium)
@@ -1212,7 +1212,8 @@ fun PlayerControls(
                   end.linkTo(parent.end, spacing.medium)
                   width = Dimension.fillToConstraints
                 } else {
-                  bottom.linkTo(seekbar.top, spacing.small)
+                  // NEW: Landscape Player Controls stack 12dp above seekbar
+                  bottom.linkTo(seekbar.top, 12.dp)
                   end.linkTo(parent.end, spacing.medium)
                 }
               },
@@ -1286,7 +1287,8 @@ fun PlayerControls(
                 }
               )
               .constrainAs(bottomLeftControls) {
-                bottom.linkTo(seekbar.top, spacing.small)
+                // NEW: Landscape Player Controls stack 12dp above seekbar
+                bottom.linkTo(seekbar.top, 12.dp)
                 start.linkTo(parent.start, spacing.medium)
                 width = Dimension.fillToConstraints
                 end.linkTo(bottomRightControls.start, spacing.small)
