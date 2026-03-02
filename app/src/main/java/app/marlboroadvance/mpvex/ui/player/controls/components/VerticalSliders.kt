@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -143,16 +144,17 @@ fun BrightnessSlider(
   brightness: Float,
   range: ClosedFloatingPointRange<Float>,
   modifier: Modifier = Modifier,
+  hideBackground: Boolean = false,
 ) {
   val coercedBrightness = brightness.coerceIn(range)
   Surface(
     modifier = modifier,
     shape = RoundedCornerShape(20.dp),
-    color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.55f),
+    color = if (hideBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.55f),
     contentColor = MaterialTheme.colorScheme.onSurface,
     tonalElevation = 0.dp,
     shadowElevation = 0.dp,
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+    border = if (hideBackground) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
   ) {
     Column(
       modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp),
@@ -188,16 +190,17 @@ fun VolumeSlider(
   boostRange: ClosedRange<Int>?,
   modifier: Modifier = Modifier,
   displayAsPercentage: Boolean = false,
+  hideBackground: Boolean = false,
 ) {
   val percentage = (percentage(volume, range) * 100).roundToInt()
   Surface(
     modifier = modifier,
     shape = RoundedCornerShape(20.dp),
-    color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.55f),
+    color = if (hideBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.55f),
     contentColor = MaterialTheme.colorScheme.onSurface,
     tonalElevation = 0.dp,
     shadowElevation = 0.dp,
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+    border = if (hideBackground) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
   ) {
     Column(
       modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp),
