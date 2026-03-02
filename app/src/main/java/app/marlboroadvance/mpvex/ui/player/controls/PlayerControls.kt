@@ -548,10 +548,8 @@ fun PlayerControls(
             exit = fadeOut(),
             modifier = Modifier.constrainAs(customLeftButtonsRef) {
                 start.linkTo(parent.start, spacing.medium)
-                top.linkTo(parent.top)
-                bottom.linkTo(parent.bottom)
-                // NEW: Moved slightly down in landscape as requested
-                verticalBias = 0.75f
+                // Hamesha seekbar ke upar anchor rahega, player controls ko touch nahi karega
+                bottom.linkTo(seekbar.top, 16.dp)
                 width = Dimension.preferredWrapContent
                 height = Dimension.wrapContent
             }
@@ -606,10 +604,8 @@ fun PlayerControls(
             exit = fadeOut(),
             modifier = Modifier.constrainAs(customRightButtonsRef) {
                 end.linkTo(parent.end, spacing.medium)
-                top.linkTo(parent.top)
-                bottom.linkTo(parent.bottom)
-                // NEW: Moved slightly down in landscape as requested
-                verticalBias = 0.75f
+                // Hamesha seekbar ke upar anchor rahega
+                bottom.linkTo(seekbar.top, 16.dp)
                 width = Dimension.preferredWrapContent
                 height = Dimension.wrapContent
             }
@@ -665,7 +661,7 @@ fun PlayerControls(
             modifier = Modifier.constrainAs(createRef()) {
                 start.linkTo(parent.start)
                 end.linkTo(parent.end)
-                // NEW: Relaxed slightly to prevent accidental seekbar touches
+                // Top se bottom tak 16.dp ka uniform stack banaya hai
                 bottom.linkTo(seekbar.top, 16.dp)
                 width = Dimension.preferredWrapContent
                 height = Dimension.wrapContent
@@ -749,8 +745,8 @@ fun PlayerControls(
               end.linkTo(parent.absoluteRight)
               start.linkTo(parent.absoluteLeft)
               if (isPortrait) {
-                // NEW: Relaxed from 4.dp to 8.dp for safer touch targets
-                bottom.linkTo(bottomRightControls.top, 8.dp)
+                // Stack me play/pause ke liye bhi same 16.dp margin
+                bottom.linkTo(bottomRightControls.top, 16.dp)
               } else {
                 top.linkTo(parent.top)
                 bottom.linkTo(parent.bottom)
@@ -1013,11 +1009,11 @@ fun PlayerControls(
               )
               .constrainAs(seekbar) {
                 if (isPortrait) {
-                  // NEW: Relaxed from 0.dp to 8.dp to prevent accidental touches
-                  bottom.linkTo(playerPauseButton.top, 8.dp)
+                  // Stack me Seekbar ke liye bhi same 16.dp margin
+                  bottom.linkTo(playerPauseButton.top, 16.dp)
                 } else {
-                  // NEW: Ensured safe 32.dp margin for landscape swipe-to-home
-                  bottom.linkTo(parent.bottom, 32.dp)
+                  // Pehle 32dp se thoda neeche 20dp par set kiya
+                  bottom.linkTo(parent.bottom, 20.dp)
                 }
                 start.linkTo(parent.start, spacing.medium)
                 end.linkTo(parent.end, spacing.medium)
