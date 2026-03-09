@@ -15,18 +15,20 @@ jobs:
       - name: Checkout Current Repo
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.ref_name }} # Ye detached HEAD ki jagah actual branch use karega
           fetch-depth: 0
 
       - name: Setup Git Identity
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global pull.rebase false
 
       - name: Backup My Meticulous Changes (The Shield)
         run: |
           mkdir -p /tmp/my_safe_files
           
-          # Yeh wo sabhi files hain jinme tumhare 8 custom changes aur 2 features hain
+          # Yeh wo sabhi files hain jinme tumne mehnat ki hai
           FILES=(
             "app/src/main/java/app/marlboroadvance/mpvex/ui/player/controls/GestureHandler.kt"
             "app/src/main/java/app/marlboroadvance/mpvex/ui/player/controls/components/SpeedControlSlider.kt"
@@ -49,7 +51,6 @@ jobs:
             "app/src/main/java/app/marlboroadvance/mpvex/ui/player/controls/components/panels/LuaScriptsPanel.kt"
           )
           
-          # Unhe unke exact path ke hisaab se safe jagah copy karna
           for file in "${FILES[@]}"; do
             if [ -f "$file" ]; then
               mkdir -p "/tmp/my_safe_files/$(dirname "$file")"
@@ -58,27 +59,37 @@ jobs:
           done
           echo "All custom files safely backed up!"
 
-      - name: Fetch and Merge Upstream & Ani-CLI
+      - name: Add Remotes & Fetch
         run: |
           git remote add dev_upstream https://github.com/marlboro-advance/mpvEx.git
           git remote add anicli_fork https://github.com/Riteshp2001/mpvEx.git
           git fetch --all
-          
-          # 1. Merge Ani-CLI integration
-          git merge anicli_fork/ani-cli-integration -X theirs --allow-unrelated-histories --no-edit -m "Auto-Merge: ani-cli feature" || echo "Conflicts in ani-cli, will be fixed by shield."
-          
-          # 2. Merge Main Upstream Master
-          git merge dev_upstream/master -X theirs --allow-unrelated-histories --no-edit -m "Auto-Sync: main upstream" || echo "Conflicts in upstream, will be fixed by shield."
 
-      - name: Restore My Meticulous Changes
+      - name: Force Merge Ani-CLI
         run: |
-          # Upstream ne jo bhi changes kiye, hum tumhari safe files wapas paste kar rahe hain
+          # Conflict par ab atakne ke bajaye force commit hoga
+          git merge anicli_fork/ani-cli-integration -X theirs --allow-unrelated-histories --no-edit -m "Auto-Merge: ani-cli feature" || {
+            git add .
+            git commit -m "Auto-Merge: ani-cli feature (Force Resolved Conflicts)"
+          }
+
+      - name: Force Merge Upstream Master
+        run: |
+          git merge dev_upstream/master -X theirs --allow-unrelated-histories --no-edit -m "Auto-Sync: main upstream" || {
+            git add .
+            git commit -m "Auto-Sync: main upstream (Force Resolved Conflicts)"
+          }
+
+      - name: Restore My Meticulous Changes & PUSH
+        run: |
+          # Upstream/ani-cli ke aane ke baad tumhari apni files hum chupke se wapas rakh rahe hain
           cp -r /tmp/my_safe_files/* ./
           
-          # Git conflicts automatically resolve ho jayenge jab hum exact original files add karenge
           git add .
           git commit -m "Shield: Restored all 8 meticulous custom changes and missing features" || echo "No changes to commit"
-          git push origin HEAD
+          
+          # YAHI WO LINE HAI JO TUMHARE REPO ME CODES UPDATE KAREGI
+          git push origin HEAD:${{ github.ref_name }}
 
       - name: Generate short SHA
         id: set-short-sha
