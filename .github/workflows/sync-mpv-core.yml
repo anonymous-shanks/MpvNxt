@@ -1,0 +1,171 @@
+name: Sync MPV Core Engine & Auto Build
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WHAT THIS DOES:
+#   Every 6 hours (or on manual trigger), syncs only the `buildscripts/`
+#   directory — the mpv/ffmpeg version definitions — from upstream sources.
+#
+#   Priority order:
+#     1. mpv-android/mpv-android  ← primary: clean, stable mpv core
+#     2. marlboro-advance/mpvEx   ← fallback: if mpv-android's changes
+#                                    conflict with our Vulkan additions
+#
+#   A 3-way merge is attempted on the `buildscripts/` subtree only.
+#   If the merge is clean, mpv-android wins (you get latest mpv + Vulkan).
+#   If there's a conflict, mpvEx wins (Vulkan support preserved).
+#   Nothing outside `buildscripts/` is ever touched.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # every 6 hours
+  workflow_dispatch:         # manual trigger from Actions tab
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync-core:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout our fork ──────────────────────────────────────────────
+      - name: Checkout fork (upstream branch)
+        uses: actions/checkout@v4
+        with:
+          ref: upstream
+          fetch-depth: 0        # full history needed for merge-base
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 2. Git identity ───────────────────────────────────────────────────
+      - name: Configure Git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # ── 3. Fetch both upstream remotes ────────────────────────────────────
+      - name: Fetch upstream remotes
+        run: |
+          git remote add mpv-android https://github.com/mpv-android/mpv-android.git || true
+          git remote add mpvex       https://github.com/marlboro-advance/mpvEx.git   || true
+          git fetch mpv-android master --no-tags --depth=50
+          git fetch mpvex       master --no-tags --depth=50
+
+      # ── 4. Check whether buildscripts actually changed in mpv-android ─────
+      - name: Check for upstream buildscripts changes
+        id: check
+        run: |
+          LOCAL_TREE=$(git rev-parse "HEAD:buildscripts"              2>/dev/null || echo "none")
+          MA_TREE=$(git    rev-parse "mpv-android/master:buildscripts" 2>/dev/null || echo "none")
+
+          echo "local_tree=$LOCAL_TREE"   >> $GITHUB_OUTPUT
+          echo "ma_tree=$MA_TREE"         >> $GITHUB_OUTPUT
+
+          if [ "$MA_TREE" = "none" ]; then
+            echo "⚠️  mpv-android has no buildscripts/ directory?"
+            echo "needs_sync=false" >> $GITHUB_OUTPUT
+          elif [ "$LOCAL_TREE" = "$MA_TREE" ]; then
+            echo "✅ buildscripts already in sync with mpv-android"
+            echo "needs_sync=false" >> $GITHUB_OUTPUT
+          else
+            echo "🔄 mpv-android has new buildscripts — analysing merge..."
+            echo "needs_sync=true" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 5. 3-way merge test on buildscripts subtree ───────────────────────
+      - name: Test 3-way merge on buildscripts subtree
+        if: steps.check.outputs.needs_sync == 'true'
+        id: merge_test
+        run: |
+          BASE=$(git merge-base HEAD mpv-android/master 2>/dev/null || echo "")
+
+          if [ -z "$BASE" ]; then
+            echo "⚠️  No common ancestor found — falling back to mpvEx"
+            echo "use_source=mpvex" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+          BASE_TREE=$(git rev-parse "$BASE:buildscripts"              2>/dev/null || echo "$EMPTY_TREE")
+          OUR_TREE=$(git  rev-parse "HEAD:buildscripts"               2>/dev/null || echo "$EMPTY_TREE")
+          THEIR_TREE=$(git rev-parse "mpv-android/master:buildscripts" 2>/dev/null || echo "$EMPTY_TREE")
+
+          echo "  base  tree: $BASE_TREE"
+          echo "  ours  tree: $OUR_TREE"
+          echo "  theirs tree: $THEIR_TREE"
+
+          TMPIDX=$(mktemp)
+
+          GIT_INDEX_FILE="$TMPIDX" git read-tree --empty
+          GIT_INDEX_FILE="$TMPIDX" git read-tree -m "$BASE_TREE" "$OUR_TREE" "$THEIR_TREE" 2>/dev/null
+          READ_TREE_STATUS=$?
+
+          UNMERGED=$(GIT_INDEX_FILE="$TMPIDX" git ls-files -u 2>/dev/null | wc -l)
+          rm -f "$TMPIDX"
+
+          echo "  read-tree exit: $READ_TREE_STATUS  |  unmerged entries: $UNMERGED"
+
+          if [ "$UNMERGED" -gt 0 ] || [ "$READ_TREE_STATUS" -ne 0 ]; then
+            echo "⚠️  Conflict in buildscripts — falling back to mpvEx (Vulkan safe)"
+            echo "use_source=mpvex" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Clean 3-way merge — syncing from mpv-android"
+            echo "use_source=mpv-android" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 6a. Apply buildscripts from mpv-android (FIXED) ───────────────────
+      - name: Sync buildscripts from mpv-android
+        if: >
+          steps.check.outputs.needs_sync == 'true' &&
+          steps.merge_test.outputs.use_source == 'mpv-android'
+        run: |
+          rm -rf buildscripts/
+          git checkout mpv-android/master -- buildscripts/
+          echo "📦 Applied buildscripts from mpv-android/master"
+
+      # ── 6b. Apply buildscripts from mpvEx (FIXED) ─────────────────────────
+      - name: Sync buildscripts from mpvEx (fallback)
+        if: >
+          steps.check.outputs.needs_sync == 'true' &&
+          steps.merge_test.outputs.use_source == 'mpvex'
+        run: |
+          MPVEX_TREE=$(git rev-parse "mpvex/master:buildscripts" 2>/dev/null || echo "none")
+          OUR_TREE=$(git  rev-parse  "HEAD:buildscripts"          2>/dev/null || echo "none")
+
+          if [ "$MPVEX_TREE" = "$OUR_TREE" ] || [ "$MPVEX_TREE" = "none" ]; then
+            echo "✅ Already in sync with mpvEx — nothing to apply"
+          else
+            rm -rf buildscripts/
+            git checkout mpvex/master -- buildscripts/
+            echo "📦 Applied buildscripts from mpvEx/master (Vulkan preserved)"
+          fi
+
+      # ── 7. Commit & push only if something actually changed ───────────────
+      - name: Commit and push
+        id: commit
+        run: |
+          # Use --all to ensure deleted files are registered in the commit
+          git add --all buildscripts/ 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "✅ No changes — skipping commit"
+            echo "updated=false" >> $GITHUB_OUTPUT
+          else
+            SOURCE="${{ steps.merge_test.outputs.use_source }}"
+            git commit -m "chore(core): sync mpv buildscripts from ${SOURCE:-mpv-android}"
+            git push origin HEAD:upstream
+            echo "✅ Pushed to upstream"
+            echo "updated=true" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 8. Trigger your existing build workflow ───────────────────────────
+      - name: Trigger build workflow
+        if: steps.commit.outputs.updated == 'true'
+        run: |
+          gh workflow run preview.yml \
+            --repo anonymous-shanks/MpvNxt \
+            --ref upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
